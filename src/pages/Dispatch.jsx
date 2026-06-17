@@ -8,6 +8,7 @@ import {
   SaveButton,
 } from "../components/WorkflowUI";
 import { TRANSPORT_TYPES } from "../lib/constants";
+import { parseColorMix } from "../lib/colorMix";
 import {
   brassToBlocks,
   calculateDispatchProgress,
@@ -32,6 +33,7 @@ const emptyForm = () => ({
   date: todayInIndia(),
   crmOrderId: "",
   dispatchBrass: "",
+  colorDispatchBrass: {},
   transportType: TRANSPORT_TYPES[0],
   driverContact: "",
   vehicleNumber: "",
@@ -77,14 +79,45 @@ export default function Dispatch() {
     [data],
   );
   const activeOrder = orders.find((row) => row.CRM_Order_ID === form.crmOrderId);
-  const dispatchBlocks = brassToBlocks(form.dispatchBrass);
+  const activeColorMix = parseColorMix(activeOrder?.Color);
+  const isDetailedColorMix = activeColorMix.length > 0;
+  const dispatchedByColor = useMemo(() => {
+    if (!activeOrder) return {};
+    return data.Dispatch_Log
+      .filter((row) => row.CRM_Order_ID === activeOrder.CRM_Order_ID)
+      .reduce((totals, row) => ({
+        ...totals,
+        [row.Color]: numberValue(totals[row.Color]) + numberValue(row.Dispatch_Brass),
+      }), {});
+  }, [activeOrder, data.Dispatch_Log]);
+  const dispatchBrass = isDetailedColorMix
+    ? activeColorMix.reduce(
+        (sum, item) => sum + numberValue(form.colorDispatchBrass?.[item.color]),
+        0,
+      )
+    : numberValue(form.dispatchBrass);
+  const dispatchBlocks = brassToBlocks(dispatchBrass);
   const revenue = activeOrder
-    ? numberValue(form.dispatchBrass) * numberValue(activeOrder.Rate_Per_Brass)
+    ? dispatchBrass * numberValue(activeOrder.Rate_Per_Brass)
     : 0;
   const companyTransport = form.transportType === "Company Transport";
 
   const onChange = ({ target }) =>
-    setForm((current) => ({ ...current, [target.name]: target.value }));
+    setForm((current) => ({
+      ...current,
+      [target.name]: target.value,
+      ...(target.name === "crmOrderId" ? { dispatchBrass: "", colorDispatchBrass: {} } : {}),
+    }));
+
+  const changeColorDispatch = (color, value) => {
+    setForm((current) => ({
+      ...current,
+      colorDispatchBrass: {
+        ...current.colorDispatchBrass,
+        [color]: value,
+      },
+    }));
+  };
 
   const save = async (event) => {
     event.preventDefault();
@@ -96,37 +129,58 @@ export default function Dispatch() {
       setMessage("Dispatch cannot exceed the remaining order quantity.");
       return;
     }
+    if (
+      isDetailedColorMix &&
+      activeColorMix.some((item) =>
+        numberValue(form.colorDispatchBrass?.[item.color]) >
+        Math.max(0, item.brass - numberValue(dispatchedByColor[item.color])) + 0.0001,
+      )
+    ) {
+      setMessage("A color dispatch cannot exceed its remaining ordered quantity.");
+      return;
+    }
     setStatus("saving");
     const timestamp = new Date().toISOString();
     try {
+      const dispatchItems = isDetailedColorMix
+        ? activeColorMix
+            .map((item) => ({
+              color: item.color,
+              brass: numberValue(form.colorDispatchBrass?.[item.color]),
+            }))
+            .filter((item) => item.brass > 0)
+        : [{ color: activeOrder.Color, brass: numberValue(form.dispatchBrass) }];
       const fresh = await appendRows(
         [
-          {
+          ...dispatchItems.map((item, index) => ({
             sheetName: "Dispatch_Log",
             row: {
               Dispatch_ID: `DSP-${crypto.randomUUID()}`,
               CRM_Order_ID: activeOrder.CRM_Order_ID,
               Date: form.date,
               Client_Name: activeOrder.Client_Name,
-              Color: activeOrder.Color,
-              Dispatch_Brass: numberValue(form.dispatchBrass),
-              Dispatch_Blocks: dispatchBlocks,
+              Color: item.color,
+              Dispatch_Brass: item.brass,
+              Dispatch_Blocks: brassToBlocks(item.brass),
               Transport_Type: form.transportType,
               Driver_Contact: companyTransport ? form.driverContact.trim() : "",
               Vehicle_Number: companyTransport ? form.vehicleNumber.trim() : "",
-              Freight_Amount: companyTransport ? numberValue(form.freightAmount) : "",
-              Revenue: revenue,
+              Freight_Amount:
+                companyTransport && index === 0
+                  ? numberValue(form.freightAmount)
+                  : "",
+              Revenue: item.brass * numberValue(activeOrder.Rate_Per_Brass),
               Notes: form.notes.trim(),
               Created_At: timestamp,
             },
-          },
+          })),
           {
             sheetName: "Activity_Log",
             row: {
               Timestamp: timestamp,
               Module: "Dispatch",
               Action: "Created",
-              Description: `${dispatchBlocks} ${activeOrder.Color} blocks dispatched to ${activeOrder.Client_Name}`,
+              Description: `${dispatchBlocks} blocks dispatched to ${activeOrder.Client_Name}`,
               User_Email: user.email,
             },
           },
@@ -220,7 +274,7 @@ export default function Dispatch() {
           </Field>
           <Field label="Client name" name="client" value={activeOrder?.Client_Name || ""} onChange={() => {}} disabled />
           <Field label="Color" name="color" value={activeOrder?.Color || ""} onChange={() => {}} disabled />
-          <Field label="Dispatch brass" name="dispatchBrass" type="number" value={form.dispatchBrass} onChange={onChange} required />
+          {!isDetailedColorMix && <Field label="Dispatch brass" name="dispatchBrass" type="number" value={form.dispatchBrass} onChange={onChange} required />}
           <Field label="Transport type" name="transportType" value={form.transportType} onChange={onChange}>
             {TRANSPORT_TYPES.map((value) => <option key={value}>{value}</option>)}
           </Field>
@@ -230,6 +284,45 @@ export default function Dispatch() {
             <Field label="Freight amount" name="freightAmount" type="number" value={form.freightAmount} onChange={onChange} />
           </>}
         </div>
+        {isDetailedColorMix && (
+          <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Color dispatch split</p>
+                <p className="mt-1 text-sm text-slate-600">Enter the quantity being dispatched for each color.</p>
+              </div>
+              <p className="text-sm font-black text-brand-800">Total: {formatNumber.format(dispatchBrass)} brass</p>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {activeColorMix.map((item) => {
+                const dispatched = numberValue(dispatchedByColor[item.color]);
+                const remaining = Math.max(0, item.brass - dispatched);
+                return (
+                  <label key={item.color} className="rounded-xl border border-slate-200 bg-white p-3">
+                    <span className="flex items-center justify-between gap-3 text-sm font-bold text-slate-800">
+                      {item.color}
+                      <span className="text-xs font-semibold text-slate-500">{formatNumber.format(remaining)} brass left</span>
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      max={remaining}
+                      step="any"
+                      disabled={remaining <= 0}
+                      value={form.colorDispatchBrass?.[item.color] || ""}
+                      onChange={(event) => changeColorDispatch(item.color, event.target.value)}
+                      placeholder="Dispatch brass"
+                      className="focus-ring mt-2 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm disabled:bg-slate-100"
+                    />
+                    <span className="mt-1 block text-xs font-semibold text-slate-500">
+                      {formatNumber.format(brassToBlocks(form.colorDispatchBrass?.[item.color]))} blocks selected
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
         <div className="mt-4"><NotesField value={form.notes} onChange={onChange} /></div>
         <div className="mt-5 flex flex-col gap-4 rounded-2xl bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-slate-500">

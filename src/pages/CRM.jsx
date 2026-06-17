@@ -8,6 +8,10 @@ import {
   SaveButton,
 } from "../components/WorkflowUI";
 import { BLOCK_COLORS, CRM_STATUSES } from "../lib/constants";
+import {
+  buildColorMixLabel,
+  STANDARD_BLOCK_COLORS,
+} from "../lib/colorMix";
 import { brassToBlocks, calculateOrderValue } from "../lib/formulas";
 import {
   formatCurrency,
@@ -26,17 +30,19 @@ const emptyForm = () => ({
   location: "",
   color: BLOCK_COLORS[0],
   customColors: [],
+  customColorBrass: {},
   orderBrass: "",
   ratePerBrass: "",
   status: CRM_STATUSES[0],
   notes: "",
 });
 
-const STANDARD_COLORS = BLOCK_COLORS.filter((color) => color !== "Custom");
-
 function buildOrderColor(form) {
   if (form.color !== "Custom") return form.color;
-  return (form.customColors || []).join(" + ");
+  return buildColorMixLabel(
+    form.customColors || [],
+    form.customColorBrass || {},
+  );
 }
 
 export default function CRM() {
@@ -66,6 +72,10 @@ export default function CRM() {
   const orderBlocks = brassToBlocks(form.orderBrass);
   const orderValue = calculateOrderValue(form.orderBrass, form.ratePerBrass);
   const orderColor = buildOrderColor(form);
+  const customBrassTotal = (form.customColors || []).reduce(
+    (sum, color) => sum + numberValue(form.customColorBrass?.[color]),
+    0,
+  );
   const summaries = useMemo(
     () =>
       CRM_STATUSES.map((orderStatus) => ({
@@ -86,8 +96,25 @@ export default function CRM() {
         customColors: selected.includes(color)
           ? selected.filter((item) => item !== color)
           : [...selected, color],
+        customColorBrass: selected.includes(color)
+          ? Object.fromEntries(
+              Object.entries(current.customColorBrass || {}).filter(
+                ([key]) => key !== color,
+              ),
+            )
+          : { ...current.customColorBrass, [color]: "" },
       };
     });
+  };
+
+  const changeCustomColorBrass = (color, value) => {
+    setForm((current) => ({
+      ...current,
+      customColorBrass: {
+        ...current.customColorBrass,
+        [color]: value,
+      },
+    }));
   };
 
   const save = async (event) => {
@@ -103,6 +130,18 @@ export default function CRM() {
 
     if (form.color === "Custom" && (form.customColors || []).length < 2) {
       setMessage("Select at least two colors for a custom order.");
+      return;
+    }
+
+    if (
+      form.color === "Custom" &&
+      ((form.customColors || []).some(
+        (color) => numberValue(form.customColorBrass?.[color]) <= 0,
+      ) ||
+        customBrassTotal <= 0 ||
+        Math.abs(customBrassTotal - numberValue(form.orderBrass)) > 0.0001)
+    ) {
+      setMessage("Enter every color quantity and make the total equal the order brass.");
       return;
     }
 
@@ -257,28 +296,53 @@ export default function CRM() {
                 </p>
               </div>
               <p className="rounded-full bg-white px-3 py-1.5 text-xs font-black text-brand-800 shadow-sm">
-                {orderColor || "No mix selected"}
+                {formatNumber.format(customBrassTotal)} / {formatNumber.format(numberValue(form.orderBrass))} brass allocated
               </p>
             </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {STANDARD_COLORS.map((color) => {
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {STANDARD_BLOCK_COLORS.map((color) => {
                 const selected = (form.customColors || []).includes(color);
                 return (
-                  <button
-                    key={color}
-                    type="button"
-                    onClick={() => toggleCustomColor(color)}
-                    className={`focus-ring rounded-full border px-4 py-2 text-sm font-bold transition ${
+                  <div key={color} className="flex items-stretch gap-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleCustomColor(color)}
+                      className={`focus-ring min-w-24 rounded-xl border px-4 py-2 text-sm font-bold transition ${
                       selected
                         ? "border-brand-700 bg-brand-700 text-white shadow-sm"
                         : "border-slate-200 bg-white text-slate-700 hover:border-brand-300"
-                    }`}
-                  >
-                    {color}
-                  </button>
+                      }`}
+                    >
+                      {color}
+                    </button>
+                    {selected && (
+                      <label className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2">
+                        <span className="sr-only">{color} quantity in brass</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={form.customColorBrass?.[color] || ""}
+                          onChange={(event) =>
+                            changeCustomColorBrass(color, event.target.value)
+                          }
+                          placeholder="Brass"
+                          className="focus-ring w-full border-0 bg-transparent p-0 text-sm text-slate-900 outline-none"
+                        />
+                        <span className="mt-1 block text-xs font-semibold text-slate-500">
+                          {formatNumber.format(brassToBlocks(form.customColorBrass?.[color]))} blocks
+                        </span>
+                      </label>
+                    )}
+                  </div>
                 );
               })}
             </div>
+            {orderColor && (
+              <p className="mt-3 text-sm font-semibold text-slate-700">
+                Mix: {orderColor}
+              </p>
+            )}
           </div>
         )}
         <div className="mt-4">
