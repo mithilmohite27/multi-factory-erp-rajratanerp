@@ -25,11 +25,19 @@ const emptyForm = () => ({
   phone: "",
   location: "",
   color: BLOCK_COLORS[0],
+  customColors: [],
   orderBrass: "",
   ratePerBrass: "",
   status: CRM_STATUSES[0],
   notes: "",
 });
+
+const STANDARD_COLORS = BLOCK_COLORS.filter((color) => color !== "Custom");
+
+function buildOrderColor(form) {
+  if (form.color !== "Custom") return form.color;
+  return (form.customColors || []).join(" + ");
+}
 
 export default function CRM() {
   const { user, logout } = useAuth();
@@ -57,6 +65,7 @@ export default function CRM() {
 
   const orderBlocks = brassToBlocks(form.orderBrass);
   const orderValue = calculateOrderValue(form.orderBrass, form.ratePerBrass);
+  const orderColor = buildOrderColor(form);
   const summaries = useMemo(
     () =>
       CRM_STATUSES.map((orderStatus) => ({
@@ -69,6 +78,18 @@ export default function CRM() {
   const onChange = ({ target }) =>
     setForm((current) => ({ ...current, [target.name]: target.value }));
 
+  const toggleCustomColor = (color) => {
+    setForm((current) => {
+      const selected = current.customColors || [];
+      return {
+        ...current,
+        customColors: selected.includes(color)
+          ? selected.filter((item) => item !== color)
+          : [...selected, color],
+      };
+    });
+  };
+
   const save = async (event) => {
     event.preventDefault();
     if (
@@ -77,6 +98,11 @@ export default function CRM() {
       numberValue(form.ratePerBrass) <= 0
     ) {
       setMessage("Enter the client, order brass, and rate.");
+      return;
+    }
+
+    if (form.color === "Custom" && (form.customColors || []).length < 2) {
+      setMessage("Select at least two colors for a custom order.");
       return;
     }
 
@@ -94,7 +120,7 @@ export default function CRM() {
               Client_Name: form.clientName.trim(),
               Phone: form.phone.trim(),
               Location: form.location.trim(),
-              Color: form.color,
+              Color: orderColor,
               Order_Brass: numberValue(form.orderBrass),
               Order_Blocks: orderBlocks,
               Rate_Per_Brass: numberValue(form.ratePerBrass),
@@ -219,11 +245,53 @@ export default function CRM() {
             {CRM_STATUSES.map((value) => <option key={value}>{value}</option>)}
           </Field>
         </div>
+        {form.color === "Custom" && (
+          <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Custom color selection
+                </p>
+                <p className="mt-1 text-sm text-slate-600">
+                  Select the colors required for this order mix.
+                </p>
+              </div>
+              <p className="rounded-full bg-white px-3 py-1.5 text-xs font-black text-brand-800 shadow-sm">
+                {orderColor || "No mix selected"}
+              </p>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {STANDARD_COLORS.map((color) => {
+                const selected = (form.customColors || []).includes(color);
+                return (
+                  <button
+                    key={color}
+                    type="button"
+                    onClick={() => toggleCustomColor(color)}
+                    className={`focus-ring rounded-full border px-4 py-2 text-sm font-bold transition ${
+                      selected
+                        ? "border-brand-700 bg-brand-700 text-white shadow-sm"
+                        : "border-slate-200 bg-white text-slate-700 hover:border-brand-300"
+                    }`}
+                  >
+                    {color}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
         <div className="mt-4">
           <NotesField value={form.notes} onChange={onChange} />
         </div>
         <div className="mt-5 flex flex-col gap-4 rounded-2xl bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-slate-500">
+            {orderColor && (
+              <>
+                Color: <strong className="text-slate-900">{orderColor}</strong>
+                {" | "}
+              </>
+            )}
             Final order: <strong className="text-slate-900">{formatNumber.format(orderBlocks)} blocks</strong>
             {" | "}
             <strong className="text-slate-900">{formatCurrency.format(orderValue)}</strong>
