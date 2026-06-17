@@ -40,7 +40,7 @@ export function sendError(res, error) {
   }
 
   const safeMessage =
-    statusCode >= 500 && isProduction
+    statusCode >= 500 && isProduction && !error.expose
       ? "The server could not complete the request."
       : error.message || "Request failed.";
 

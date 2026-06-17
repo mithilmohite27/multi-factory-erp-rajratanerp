@@ -6,6 +6,9 @@ import { logoUrl } from "../lib/branding";
 export default function Login() {
   const { login, status, authError } = useAuth();
   const clientConfigured = Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID);
+  const isLocalhost = ["localhost", "127.0.0.1"].includes(
+    window.location.hostname,
+  );
   const isDenied = status === "denied";
 
   return (
@@ -96,8 +99,8 @@ export default function Login() {
           )}
 
           <p className="mt-7 text-center text-xs leading-5 text-white/35">
-            Access is limited to registered ERP users. For local login, open
-            http://localhost:5173.
+            Access is limited to registered ERP users.
+            {isLocalhost ? " For local login, open http://localhost:5173." : ""}
           </p>
         </div>
       </section>

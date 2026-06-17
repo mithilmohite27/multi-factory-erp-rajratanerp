@@ -1,31 +1,44 @@
 import { google } from "googleapis";
 
-const REQUIRED_ENV = [
-  "VITE_GOOGLE_CLIENT_ID",
-  "GOOGLE_SPREADSHEET_ID_SHREEDEGARAY",
+const REQUIRED_AUTH_ENV = ["VITE_GOOGLE_CLIENT_ID"];
+const REQUIRED_SHEETS_ENV = [
   "GOOGLE_SERVICE_ACCOUNT_EMAIL",
   "GOOGLE_PRIVATE_KEY",
 ];
 
-function requireEnvironment() {
-  const missing = REQUIRED_ENV.filter((key) => !process.env[key]);
+function hasSpreadsheetId() {
+  return Boolean(
+    process.env.GOOGLE_SPREADSHEET_ID ||
+      process.env.GOOGLE_SPREADSHEET_ID_SHREEDEGARAY,
+  );
+}
+
+function requireEnvironment(requiredKeys, label) {
+  const missing = requiredKeys.filter((key) => !process.env[key]);
+  if (label === "Google Sheets" && !hasSpreadsheetId()) {
+    missing.unshift("GOOGLE_SPREADSHEET_ID");
+  }
 
   if (missing.length > 0) {
     const error = new Error(
-      `Server configuration is incomplete: ${missing.join(", ")}`,
+      `${label} configuration is incomplete: ${missing.join(", ")}`,
     );
-    error.statusCode = 500;
+    error.statusCode = 503;
+    error.expose = true;
     throw error;
   }
 }
 
 export function getSpreadsheetId() {
-  requireEnvironment();
-  return process.env.GOOGLE_SPREADSHEET_ID_SHREEDEGARAY;
+  requireEnvironment(REQUIRED_SHEETS_ENV, "Google Sheets");
+  return (
+    process.env.GOOGLE_SPREADSHEET_ID ||
+    process.env.GOOGLE_SPREADSHEET_ID_SHREEDEGARAY
+  );
 }
 
 export function getSheetsClient() {
-  requireEnvironment();
+  requireEnvironment(REQUIRED_SHEETS_ENV, "Google Sheets");
 
   const auth = new google.auth.JWT({
     email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
@@ -37,7 +50,7 @@ export function getSheetsClient() {
 }
 
 export async function verifyGoogleCredential(credential) {
-  requireEnvironment();
+  requireEnvironment(REQUIRED_AUTH_ENV, "Google OAuth");
 
   if (!credential) {
     const error = new Error("Google authentication is required.");
