@@ -12,6 +12,7 @@ import {
   isSuperAdmin,
   useFactory,
 } from "../lib/factories";
+import { useI18n } from "../lib/i18n";
 
 const formatNumber = new Intl.NumberFormat("en-IN", {
   maximumFractionDigits: 2,
@@ -23,22 +24,22 @@ const formatCurrency = new Intl.NumberFormat("en-IN", {
 });
 
 const cards = [
-  { key: "todaysProduction", label: "Today's Production", type: "number", code: "TP" },
-  { key: "currentStock", label: "Current Stock", type: "number", code: "CS" },
-  { key: "todaysRevenue", label: "Today's Revenue", type: "currency", code: "TR" },
-  { key: "pendingOrders", label: "Pending Orders", type: "number", code: "PO" },
-  { key: "vendorOutstanding", label: "Vendor Outstanding", type: "currency", code: "VO" },
-  { key: "cashBalance", label: "Cash Balance", type: "currency", code: "CB" },
-  { key: "netProfit", label: "Net Profit", type: "currency", code: "NP" },
-  { key: "qcLoss", label: "QC Loss", type: "currency", code: "QL" },
-  { key: "payrollDue", label: "Payroll Due", type: "currency", code: "PD" },
+  { key: "todaysProduction", labelKey: "dashboard.todaysProduction", type: "number", code: "TP" },
+  { key: "currentStock", labelKey: "dashboard.currentStock", type: "number", code: "CS" },
+  { key: "todaysRevenue", labelKey: "dashboard.todaysRevenue", type: "currency", code: "TR" },
+  { key: "pendingOrders", labelKey: "dashboard.pendingOrders", type: "number", code: "PO" },
+  { key: "vendorOutstanding", labelKey: "dashboard.vendorOutstanding", type: "currency", code: "VO" },
+  { key: "cashBalance", labelKey: "dashboard.cashBalance", type: "currency", code: "CB" },
+  { key: "netProfit", labelKey: "dashboard.netProfit", type: "currency", code: "NP" },
+  { key: "qcLoss", labelKey: "dashboard.qcLoss", type: "currency", code: "QL" },
+  { key: "payrollDue", labelKey: "dashboard.payrollDue", type: "currency", code: "PD" },
 ];
 
 const quickActions = [
-  { label: "Add production", path: "/production-log", code: "PL" },
-  { label: "New CRM entry", path: "/crm", code: "CR" },
-  { label: "Record dispatch", path: "/dispatch", code: "DS" },
-  { label: "Enter cash flow", path: "/cash-register", code: "CA" },
+  { labelKey: "quick.addProduction", path: "/production-log", code: "PL" },
+  { labelKey: "quick.newCrmEntry", path: "/crm", code: "CR" },
+  { labelKey: "quick.recordDispatch", path: "/dispatch", code: "DS" },
+  { labelKey: "quick.enterCashFlow", path: "/cash-register", code: "CA" },
 ];
 
 function formatCardValue(card, value) {
@@ -50,6 +51,7 @@ function formatCardValue(card, value) {
 export default function Dashboard() {
   const { user, logout } = useAuth();
   const { selectedFactoryId } = useFactory();
+  const { t } = useI18n();
   const [dashboard, setDashboard] = useState(null);
   const [status, setStatus] = useState("loading");
   const [error, setError] = useState("");
@@ -83,14 +85,18 @@ export default function Dashboard() {
         <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.24em] text-sand-300">
-              {factoryLabel(selectedFactoryId)} overview
+              {t("dashboard.overview", {
+                factory:
+                  selectedFactoryId === ALL_FACTORY_ID
+                    ? t("factories.all")
+                    : factoryLabel(selectedFactoryId),
+              })}
             </p>
             <h1 className="mt-3 text-2xl font-black tracking-tight sm:text-3xl">
               {CLIENT_CONFIG.companyName}
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-white/55">
-              Current operational and financial outputs from the authorized
-              company workbook.
+              {t("dashboard.subtitle")}
             </p>
           </div>
           <button
@@ -99,14 +105,14 @@ export default function Dashboard() {
             disabled={status === "loading"}
             className="focus-ring inline-flex w-fit items-center rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/15 disabled:cursor-wait disabled:opacity-60"
           >
-            {status === "loading" ? "Refreshing..." : "Refresh dashboard"}
+            {status === "loading" ? t("dashboard.refreshing") : t("dashboard.refresh")}
           </button>
         </div>
       </section>
 
       {error && (
         <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          Live data could not be refreshed. Showing the latest available cache.
+          {t("dashboard.liveDataError")}
           {" "}{error}
         </div>
       )}
@@ -119,7 +125,9 @@ export default function Dashboard() {
           >
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm font-medium text-slate-500">{card.label}</p>
+                <p className="text-sm font-medium text-slate-500">
+                  {t(card.labelKey)}
+                </p>
                 <p className="mt-3 text-2xl font-black tracking-tight text-slate-900">
                   {dashboard
                     ? formatCardValue(card, dashboard.cards?.[card.key])
@@ -139,10 +147,10 @@ export default function Dashboard() {
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-panel sm:p-6">
             <div className="mb-5">
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-600">
-                Factory-wise control
+                {t("dashboard.factoryWiseControl")}
               </p>
               <h2 className="mt-1 text-lg font-bold text-slate-900">
-                All factory performance
+                {t("dashboard.allFactoryPerformance")}
               </h2>
             </div>
             <div className="grid gap-4 xl:grid-cols-3">
@@ -154,19 +162,19 @@ export default function Dashboard() {
                   <h3 className="font-black text-slate-900">{factory.name}</h3>
                   <div className="mt-4 grid gap-3 text-sm">
                     <div className="flex justify-between gap-4">
-                      <span className="text-slate-500">Production today</span>
+                      <span className="text-slate-500">{t("dashboard.productionToday")}</span>
                       <strong>{formatNumber.format(factory.cards.todaysProduction || 0)}</strong>
                     </div>
                     <div className="flex justify-between gap-4">
-                      <span className="text-slate-500">Current stock</span>
+                      <span className="text-slate-500">{t("dashboard.currentStock")}</span>
                       <strong>{formatNumber.format(factory.cards.currentStock || 0)}</strong>
                     </div>
                     <div className="flex justify-between gap-4">
-                      <span className="text-slate-500">Revenue today</span>
+                      <span className="text-slate-500">{t("dashboard.revenueToday")}</span>
                       <strong>{formatCurrency.format(factory.cards.todaysRevenue || 0)}</strong>
                     </div>
                     <div className="flex justify-between gap-4">
-                      <span className="text-slate-500">Pending orders</span>
+                      <span className="text-slate-500">{t("dashboard.pendingOrders")}</span>
                       <strong>{formatNumber.format(factory.cards.pendingOrders || 0)}</strong>
                     </div>
                   </div>
@@ -181,17 +189,17 @@ export default function Dashboard() {
           <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 sm:px-6">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-600">
-                Recent activity
+                {t("dashboard.recentActivity")}
               </p>
               <h2 className="mt-1 text-lg font-bold text-slate-900">
-                Latest updates
+                {t("dashboard.latestUpdates")}
               </h2>
             </div>
             <Link
               to="/reports-center"
               className="focus-ring rounded-lg px-3 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-50"
             >
-              View reports
+              {t("dashboard.viewReports")}
             </Link>
           </div>
 
@@ -221,7 +229,7 @@ export default function Dashboard() {
               ))
             ) : (
               <div className="px-6 py-12 text-center text-sm text-slate-500">
-                No activity has been recorded yet.
+                {t("dashboard.emptyActivity")}
               </div>
             )}
           </div>
@@ -229,16 +237,16 @@ export default function Dashboard() {
 
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-panel sm:p-6">
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-600">
-            {isSuperAdmin(user) ? "Owner actions" : "Quick actions"}
+            {isSuperAdmin(user) ? t("dashboard.ownerActions") : t("dashboard.quickActions")}
           </p>
           <h2 className="mt-1 text-lg font-bold text-slate-900">
-            {isSuperAdmin(user) ? "Manage company" : "Start an entry"}
+            {isSuperAdmin(user) ? t("dashboard.manageCompany") : t("dashboard.startEntry")}
           </h2>
           <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
             {(isSuperAdmin(user)
               ? [
-                  { label: "Manage user access", path: "/settings", code: "UA" },
-                  { label: "View reports", path: "/reports-center", code: "RC" },
+                  { labelKey: "dashboard.manageUserAccess", path: "/settings", code: "UA" },
+                  { labelKey: "dashboard.viewReports", path: "/reports-center", code: "RC" },
                 ]
               : quickActions.filter((action) =>
                   canAccessModule(
@@ -260,7 +268,7 @@ export default function Dashboard() {
                 <span className="grid h-8 w-8 place-items-center rounded-lg bg-slate-100 text-[10px] font-black text-slate-600">
                   {action.code}
                 </span>
-                {action.label}
+                {t(action.labelKey)}
               </Link>
             ))}
           </div>

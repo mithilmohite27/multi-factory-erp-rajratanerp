@@ -2,9 +2,11 @@ import { GoogleLogin } from "@react-oauth/google";
 import { CLIENT_CONFIG } from "../lib/clientConfig";
 import { useAuth } from "../lib/authContext";
 import { logoUrl } from "../lib/branding";
+import { LANGUAGES, useI18n } from "../lib/i18n";
 
 export default function Login() {
   const { login, status, authError } = useAuth();
+  const { language, setLanguage, t } = useI18n();
   const clientConfigured = Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID);
   const isLocalhost = ["localhost", "127.0.0.1"].includes(
     window.location.hostname,
@@ -38,20 +40,19 @@ export default function Login() {
 
         <div className="my-16 max-w-2xl lg:my-10">
           <p className="text-xs font-bold uppercase tracking-[0.28em] text-sand-300">
-            Jaipur industrial operations
+            {t("login.heroEyebrow")}
           </p>
           <h1 className="mt-5 text-4xl font-black leading-tight tracking-tight sm:text-5xl xl:text-6xl">
-            Factory control for paver block growth.
+            {t("login.heroTitle")}
           </h1>
           <p className="mt-6 max-w-xl text-base leading-7 text-white/55 sm:text-lg">
-            Production, inventory, dispatch, quality, finance, and workforce
-            control for {CLIENT_CONFIG.companyName}.
+            {t("login.summary", { companyName: CLIENT_CONFIG.companyName })}
           </p>
           <div className="mt-7 grid max-w-xl gap-3 sm:grid-cols-3">
             {[
-              ["3", "Factories"],
-              ["30+", "Workers"],
-              ["Hindi", "Friendly UI"],
+              ["3", t("login.statFactories")],
+              ["30+", t("login.statWorkers")],
+              ["EN / हिंदी", t("login.statLanguage")],
             ].map(([value, label]) => (
               <div
                 key={label}
@@ -71,13 +72,39 @@ export default function Login() {
 
       <section className="relative flex items-center justify-center py-12 lg:pl-16">
         <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-white/[0.07] p-7 shadow-2xl shadow-black/30 backdrop-blur sm:p-9">
+          <div className="mb-6 flex justify-end">
+            <div className="flex rounded-full border border-white/10 bg-white/[0.06] p-1 text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => setLanguage(LANGUAGES.EN)}
+                className={`rounded-full px-3 py-1.5 transition ${
+                  language === LANGUAGES.EN
+                    ? "bg-white text-brand-900"
+                    : "text-white/55 hover:text-white"
+                }`}
+              >
+                English
+              </button>
+              <button
+                type="button"
+                onClick={() => setLanguage(LANGUAGES.HI)}
+                className={`rounded-full px-3 py-1.5 transition ${
+                  language === LANGUAGES.HI
+                    ? "bg-white text-brand-900"
+                    : "text-white/55 hover:text-white"
+                }`}
+              >
+                हिंदी
+              </button>
+            </div>
+          </div>
           <div className="mb-8">
             <span className="inline-flex rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1 text-xs font-semibold text-emerald-200">
-              Secure ERP access
+              {t("login.access")}
             </span>
-            <h2 className="mt-5 text-2xl font-bold">Sign in to continue</h2>
+            <h2 className="mt-5 text-2xl font-bold">{t("login.signIn")}</h2>
             <p className="mt-2 text-sm leading-6 text-white/50">
-              Use the authorized Google account for {CLIENT_CONFIG.companyName}.
+              {t("login.clientHint", { companyName: CLIENT_CONFIG.companyName })}
             </p>
           </div>
 
@@ -96,8 +123,7 @@ export default function Login() {
 
           {!clientConfigured ? (
             <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 px-4 py-4 text-sm text-amber-100">
-              Google Login is not configured. Add `VITE_GOOGLE_CLIENT_ID` to the
-              environment.
+              {t("login.configMissing")}
             </div>
           ) : (
             <div className="flex min-h-11 justify-center">
@@ -117,8 +143,8 @@ export default function Login() {
           )}
 
           <p className="mt-7 text-center text-xs leading-5 text-white/35">
-            Access is limited to registered ERP users.
-            {isLocalhost ? " For local login, open http://localhost:5173." : ""}
+            {t("login.accessLimited")}
+            {isLocalhost ? t("login.localHint") : ""}
           </p>
         </div>
       </section>

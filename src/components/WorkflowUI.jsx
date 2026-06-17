@@ -1,3 +1,5 @@
+import { useI18n } from "../lib/i18n";
+
 export function PageHeader({ eyebrow, title, description }) {
   return (
     <section className="rounded-3xl bg-brand-900 px-6 py-7 text-white shadow-panel sm:px-8">
@@ -80,25 +82,29 @@ export function NotesField({ value, onChange }) {
 }
 
 export function SaveButton({ busy, children = "Save" }) {
+  const { t } = useI18n();
+
   return (
     <button
       type="submit"
       disabled={busy}
       className="focus-ring rounded-xl bg-brand-700 px-5 py-3 text-sm font-bold text-white hover:bg-brand-800 disabled:opacity-60"
     >
-      {busy ? "Saving..." : children}
+      {busy ? t("actions.saving") : children === "Save" ? t("actions.save") : children}
     </button>
   );
 }
 
 export function DeleteButton({ onClick }) {
+  const { t } = useI18n();
+
   return (
     <button
       type="button"
       onClick={onClick}
       className="focus-ring rounded-lg px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50"
     >
-      Delete
+      {t("actions.delete")}
     </button>
   );
 }

@@ -11,7 +11,7 @@ export const CLIENT_CONFIG = Object.freeze({
   ownerDesignation: "Owner",
   gstin: "GSTIN pending",
   industry: "Interlocking Paver Block Manufacturing",
-  languagePreference: "Hindi-friendly",
+  languagePreference: "English / हिंदी",
   factoryCount: 3,
   locale: "en-IN",
   currency: "INR",

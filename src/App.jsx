@@ -11,6 +11,7 @@ import {
   factoryLabel,
   useFactory,
 } from "./lib/factories";
+import { LANGUAGES, useI18n } from "./lib/i18n";
 import BillsChallans from "./pages/BillsChallans";
 import CashRegister from "./pages/CashRegister";
 import CRM from "./pages/CRM";
@@ -47,10 +48,12 @@ const routes = [
 const MODULE_GROUPS = [
   {
     label: "Owner",
+    labelKey: "owner",
     keys: ["dashboard", "reports-center", "settings"],
   },
   {
     label: "Operations",
+    labelKey: "operations",
     keys: [
       "production-log",
       "material-inventory",
@@ -60,10 +63,12 @@ const MODULE_GROUPS = [
   },
   {
     label: "Sales & Dispatch",
+    labelKey: "salesDispatch",
     keys: ["crm", "dispatch", "bills-challans"],
   },
   {
     label: "Finance",
+    labelKey: "finance",
     keys: ["vendor-ledger", "payroll", "cash-register", "profit-loss"],
   },
 ];
@@ -83,6 +88,7 @@ function BrandMark() {
 }
 
 function Sidebar({ isOpen, closeSidebar, user }) {
+  const { t, language } = useI18n();
   const visibleModules = MODULES.filter((module) =>
     canAccessModule(user, module.key),
   );
@@ -124,12 +130,14 @@ function Sidebar({ isOpen, closeSidebar, user }) {
           </div>
           <div className="mt-5 grid grid-cols-2 gap-2 text-xs">
             <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2">
-              <p className="text-white/35">Factories</p>
+              <p className="text-white/35">{t("app.factories")}</p>
               <p className="mt-1 font-black">{CLIENT_CONFIG.factoryCount}</p>
             </div>
             <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2">
-              <p className="text-white/35">Mode</p>
-              <p className="mt-1 font-black">Hindi-ready</p>
+              <p className="text-white/35">{t("app.language")}</p>
+              <p className="mt-1 font-black">
+                {language === LANGUAGES.HI ? "हिंदी" : "English"}
+              </p>
             </div>
           </div>
         </div>
@@ -144,7 +152,7 @@ function Sidebar({ isOpen, closeSidebar, user }) {
             return (
               <div key={group.label} className="mb-5 last:mb-0">
                 <p className="mb-2 px-3 text-[10px] font-black uppercase tracking-[0.18em] text-white/30">
-                  {group.label}
+                  {t(`groups.${group.labelKey}`)}
                 </p>
                 <div className="space-y-1">
                   {groupModules.map((module) => (
@@ -164,7 +172,9 @@ function Sidebar({ isOpen, closeSidebar, user }) {
                       <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-current/10 bg-current/[0.05] text-[10px] font-black">
                         {module.shortLabel}
                       </span>
-                      <span className="truncate">{module.label}</span>
+                      <span className="truncate">
+                        {t(`modules.${module.key}`)}
+                      </span>
                     </NavLink>
                   ))}
                 </div>
@@ -187,17 +197,62 @@ function Sidebar({ isOpen, closeSidebar, user }) {
 }
 
 function LoadingScreen() {
+  const { t } = useI18n();
+
   return (
     <div className="grid min-h-screen place-items-center bg-[#07110f] text-white">
       <div className="text-center">
         <BrandMark />
-        <p className="mt-4 text-sm text-white/50">Securing your workspace...</p>
+        <p className="mt-4 text-sm text-white/50">{t("app.loading")}</p>
       </div>
     </div>
   );
 }
 
+function LanguageToggle() {
+  const { language, setLanguage, t } = useI18n();
+
+  return (
+    <label className="flex items-center gap-1 rounded-full border border-slate-200 bg-white px-1.5 py-1 text-xs font-bold text-slate-600 shadow-sm">
+      <span className="sr-only">{t("app.language")}</span>
+      <button
+        type="button"
+        onClick={() => setLanguage(LANGUAGES.EN)}
+        className={`rounded-full px-3 py-1.5 transition ${
+          language === LANGUAGES.EN
+            ? "bg-brand-700 text-white"
+            : "text-slate-500 hover:bg-slate-50"
+        }`}
+      >
+        <span className="hidden md:inline">English</span>
+        <span className="md:hidden">EN</span>
+      </button>
+      <button
+        type="button"
+        onClick={() => setLanguage(LANGUAGES.HI)}
+        className={`rounded-full px-3 py-1.5 transition ${
+          language === LANGUAGES.HI
+            ? "bg-brand-700 text-white"
+            : "text-slate-500 hover:bg-slate-50"
+        }`}
+      >
+        हिंदी
+      </button>
+    </label>
+  );
+}
+
+function translatedRole(role, t) {
+  const key = String(role || "").trim().toLowerCase();
+  if (key === "super admin") return t("app.role.superAdmin");
+  if (key === "factory admin") return t("app.role.factoryAdmin");
+  if (key === "supervisor") return t("app.role.supervisor");
+  if (key === "operator") return t("app.role.operator");
+  return role;
+}
+
 function FactorySwitcher() {
+  const { t } = useI18n();
   const {
     accessibleFactories,
     canSeeAllFactories,
@@ -207,14 +262,14 @@ function FactorySwitcher() {
 
   return (
     <label className="hidden items-center gap-2 text-xs font-semibold text-slate-500 md:flex">
-      <span className="hidden xl:inline">Factory view</span>
+      <span className="hidden xl:inline">{t("app.factoryView")}</span>
       <select
         value={selectedFactoryId}
         onChange={(event) => setFactoryId(event.target.value)}
         className="focus-ring rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-800 shadow-sm"
       >
         {canSeeAllFactories && (
-          <option value={ALL_FACTORY_ID}>All factories</option>
+          <option value={ALL_FACTORY_ID}>{t("factories.all")}</option>
         )}
         {accessibleFactories.map((factory) => (
           <option key={factory.id} value={factory.id}>
@@ -227,6 +282,7 @@ function FactorySwitcher() {
 }
 
 function AuthenticatedShell({ user, logout, isSidebarOpen, setIsSidebarOpen }) {
+  const { t } = useI18n();
   const { selectedFactoryId } = useFactory();
 
   return (
@@ -256,21 +312,21 @@ function AuthenticatedShell({ user, logout, isSidebarOpen, setIsSidebarOpen }) {
                 {CLIENT_CONFIG.companyName}
               </p>
               <p className="hidden truncate text-xs text-slate-500 sm:block">
-                {factoryLabel(selectedFactoryId)} | {CLIENT_CONFIG.address} | {CLIENT_CONFIG.industry}
+                {selectedFactoryId === ALL_FACTORY_ID
+                  ? t("factories.all")
+                  : factoryLabel(selectedFactoryId)} | {CLIENT_CONFIG.address} | {CLIENT_CONFIG.industry}
               </p>
             </div>
 
             <div className="ml-auto flex items-center gap-2">
-              <span className="hidden rounded-full border border-brand-100 bg-brand-50 px-3 py-1.5 text-xs font-black text-brand-700 xl:inline-flex">
-                Hindi-friendly
-              </span>
+              <LanguageToggle />
               <FactorySwitcher />
               <span className="hidden rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-right md:block">
                 <span className="block text-xs font-semibold text-slate-800">
                   {user.name}
                 </span>
                 <span className="block text-[11px] text-slate-400">
-                  {user.role}
+                  {translatedRole(user.role, t)}
                 </span>
               </span>
               <button
@@ -278,7 +334,7 @@ function AuthenticatedShell({ user, logout, isSidebarOpen, setIsSidebarOpen }) {
                 onClick={logout}
                 className="focus-ring rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 shadow-sm transition hover:border-red-200 hover:bg-red-50 hover:text-red-700"
               >
-                Logout
+                {t("app.logout")}
               </button>
             </div>
           </div>
