@@ -9,6 +9,7 @@ import {
   FactoryProvider,
   canAccessModule,
   factoryLabel,
+  isSuperAdmin,
   useFactory,
 } from "./lib/factories";
 import { LANGUAGES, useI18n } from "./lib/i18n";
@@ -87,8 +88,31 @@ function BrandMark() {
   );
 }
 
+function displayNameForUser(user, t) {
+  const name = String(user?.name || "").trim();
+  if (name && !name.includes("@")) return name;
+  return translatedRole(user?.role, t) || "User";
+}
+
+function factoryDisplayForUser(user, accessibleFactories) {
+  if (isSuperAdmin(user)) return "1, 2, 3";
+  if (accessibleFactories.length === 0) return "-";
+  return accessibleFactories.map((factory) => factory.name).join(", ");
+}
+
+function profileMetaForUser(user, accessibleFactories, t) {
+  if (isSuperAdmin(user)) {
+    return `${translatedRole(user.role, t)} • ${t("factories.all")}`;
+  }
+  return accessibleFactories.length
+    ? accessibleFactories.map((factory) => factory.name).join(", ")
+    : translatedRole(user.role, t);
+}
+
 function Sidebar({ isOpen, closeSidebar, user }) {
   const { t, language } = useI18n();
+  const { accessibleFactories } = useFactory();
+  const ownerView = isSuperAdmin(user);
   const visibleModules = MODULES.filter((module) =>
     canAccessModule(user, module.key),
   );
@@ -130,8 +154,16 @@ function Sidebar({ isOpen, closeSidebar, user }) {
           </div>
           <div className="mt-5 grid grid-cols-2 gap-2 text-xs">
             <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2">
-              <p className="text-white/35">{t("app.factories")}</p>
-              <p className="mt-1 font-black">{CLIENT_CONFIG.factoryCount}</p>
+              <p className="text-white/35">
+                {ownerView
+                  ? t("app.factories")
+                  : language === LANGUAGES.HI
+                    ? "असाइन फैक्ट्री"
+                    : "Assigned Factory"}
+              </p>
+              <p className="mt-1 truncate font-black">
+                {factoryDisplayForUser(user, accessibleFactories)}
+              </p>
             </div>
             <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2">
               <p className="text-white/35">{t("app.language")}</p>
@@ -186,9 +218,14 @@ function Sidebar({ isOpen, closeSidebar, user }) {
         <div className="border-t border-white/[0.07] px-5 py-4">
           <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
             <p className="truncate text-xs font-bold text-white/75">
-              {user.email}
+              {displayNameForUser(user, t)}
             </p>
-            <p className="mt-1 text-xs text-white/35">{CLIENT_CONFIG.poweredBy}</p>
+            <p className="mt-1 truncate text-xs text-white/45">
+              {profileMetaForUser(user, accessibleFactories, t)}
+            </p>
+            <p className="mt-3 border-t border-white/10 pt-2 text-[11px] text-white/28">
+              {CLIENT_CONFIG.poweredBy}
+            </p>
           </div>
         </div>
       </aside>
