@@ -9,6 +9,7 @@ const REQUIRED_SHEETS_ENV = [
 function hasSpreadsheetId() {
   return Boolean(
     process.env.GOOGLE_SPREADSHEET_ID ||
+      process.env.GOOGLE_SPREADSHEET_ID_MultiFactoryERP ||
       process.env.GOOGLE_SPREADSHEET_ID_SHREEDEGARAY,
   );
 }
@@ -33,6 +34,7 @@ export function getSpreadsheetId() {
   requireEnvironment(REQUIRED_SHEETS_ENV, "Google Sheets");
   return (
     process.env.GOOGLE_SPREADSHEET_ID ||
+    process.env.GOOGLE_SPREADSHEET_ID_MultiFactoryERP ||
     process.env.GOOGLE_SPREADSHEET_ID_SHREEDEGARAY
   );
 }
