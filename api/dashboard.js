@@ -16,9 +16,9 @@ const DASHBOARD_SHEETS = [
 ];
 
 const FACTORIES = [
-  { id: "factory-1", name: "Factory 1" },
-  { id: "factory-2", name: "Factory 2" },
-  { id: "factory-3", name: "Factory 3" },
+  { id: "factory-1", name: "Kalot Factory 1" },
+  { id: "factory-2", name: "Kalot Factory 2" },
+  { id: "factory-3", name: "Kalot Factory 3" },
 ];
 const DASHBOARD_CACHE_TTL_MS = 60 * 1000;
 const dashboardCache = new Map();
@@ -59,6 +59,46 @@ const isToday = (value) => rowDateKey(value) === indiaDateKey();
 const sum = (rows, field) =>
   rows.reduce((total, row) => total + numberValue(row[field]), 0);
 
+function periodStart(period) {
+  const today = indiaDateKey();
+  if (period === "month") return `${today.slice(0, 7)}-01`;
+  if (period === "week") {
+    const date = new Date(`${today}T12:00:00+05:30`);
+    const day = date.getUTCDay() || 7;
+    date.setUTCDate(date.getUTCDate() - day + 1);
+    return indiaDateKey(date);
+  }
+  return today;
+}
+
+function rowsForPeriod(rows, period, field = "Date") {
+  const start = periodStart(period);
+  const end = indiaDateKey();
+  return rows.filter((row) => {
+    const key = rowDateKey(row[field]);
+    return key && key >= start && key <= end;
+  });
+}
+
+function statusValue(row) {
+  return String(row.Status || "").trim().toLowerCase();
+}
+
+function isOpenOrder(row) {
+  return !["dispatched", "completed", "complete", "closed", "cancelled"].includes(
+    statusValue(row),
+  );
+}
+
+function parseColorMix(value) {
+  const parts = String(value || "").split("+");
+  const mix = parts.map((part) => {
+    const match = part.trim().match(/^(.+?):\s*([0-9]+(?:\.[0-9]+)?)\s*brass$/i);
+    return match ? { color: match[1].trim(), blocks: Math.round(numberValue(match[2]) * 285) } : null;
+  });
+  return mix.length >= 2 && mix.every(Boolean) ? mix : [];
+}
+
 function filterRowsByFactory(rows, factoryId) {
   if (!factoryId || factoryId === "all") return rows;
   return rows.filter((row) => {
@@ -76,6 +116,17 @@ function filterDataByFactory(data, factoryId) {
   );
 }
 
+function filterDataByExactFactory(data, factoryId) {
+  return Object.fromEntries(
+    Object.entries(data).map(([sheetName, rows]) => [
+      sheetName,
+      (rows || []).filter(
+        (row) => (row.Factory_ID || row.factoryId || row.FactoryId || "") === factoryId,
+      ),
+    ]),
+  );
+}
+
 function openingStockTotal(rows) {
   return rows.reduce((total, row) => {
     const blocks = numberValue(row.Blocks ?? row.Quantity);
@@ -85,17 +136,54 @@ function openingStockTotal(rows) {
   }, 0);
 }
 
-function buildDashboard(data) {
-  const productionToday = data.Production_Log.filter((row) =>
-    isToday(row.Date),
-  );
-  const dispatchToday = data.Dispatch_Log.filter((row) => isToday(row.Date));
-  const qcToday = data.QC_Log.filter((row) => isToday(row.Date));
-  const pendingOrders = data.CRM_Log.filter((row) =>
-    ["order", "partial", "pending", "open", "follow-up", "follow up", "quoted"].includes(
-      String(row.Status).trim().toLowerCase(),
-    ),
-  ).length;
+function dispatchTotalsByOrder(dispatchRows) {
+  return dispatchRows.reduce((totals, row) => {
+    const id = row.CRM_Order_ID;
+    if (!id) return totals;
+    totals[id] = numberValue(totals[id]) + numberValue(row.Dispatch_Blocks ?? row.Blocks);
+    return totals;
+  }, {});
+}
+
+function buildPendingColors(orders, dispatchRows) {
+  const result = {};
+  orders.filter(isOpenOrder).forEach((order) => {
+    const orderDispatches = dispatchRows.filter(
+      (row) => row.CRM_Order_ID === order.CRM_Order_ID,
+    );
+    const mix = parseColorMix(order.Color);
+    if (mix.length) {
+      mix.forEach((item) => {
+        const dispatched = orderDispatches
+          .filter((row) => row.Color === item.color)
+          .reduce((total, row) => total + numberValue(row.Dispatch_Blocks), 0);
+        result[item.color] = numberValue(result[item.color]) + Math.max(0, item.blocks - dispatched);
+      });
+      return;
+    }
+    const dispatched = orderDispatches.reduce(
+      (total, row) => total + numberValue(row.Dispatch_Blocks),
+      0,
+    );
+    const color = String(order.Color || "Unspecified").includes("+")
+      ? "Custom mix"
+      : String(order.Color || "Unspecified");
+    result[color] = numberValue(result[color]) + Math.max(0, numberValue(order.Order_Blocks) - dispatched);
+  });
+  return Object.entries(result)
+    .filter(([, blocks]) => blocks > 0)
+    .map(([color, blocks]) => ({ color, blocks }))
+    .sort((a, b) => b.blocks - a.blocks);
+}
+
+function buildDashboard(data, period = "today") {
+  const productionPeriod = rowsForPeriod(data.Production_Log, period);
+  const dispatchPeriod = rowsForPeriod(data.Dispatch_Log, period);
+  const qcPeriod = rowsForPeriod(data.QC_Log, period);
+  const cashPeriod = rowsForPeriod(data.CashFlow_Log, period);
+  const activityPeriod = rowsForPeriod(data.Activity_Log, period, "Timestamp");
+  const pendingOrders = data.CRM_Log.filter(isOpenOrder);
+  const dispatchedByOrder = dispatchTotalsByOrder(data.Dispatch_Log);
   const cashBalance = data.CashFlow_Log.reduce((balance, row) => {
     const type = String(row.Type).trim().toLowerCase();
     const amount = numberValue(row.Amount);
@@ -103,7 +191,7 @@ function buildDashboard(data) {
       ? balance + amount
       : balance - amount;
   }, 0);
-  const totalRevenue = sum(data.Dispatch_Log, "Revenue");
+  const periodRevenue = sum(dispatchPeriod, "Revenue");
   const vendorInvoices = data.Vendor_Ledger.filter(
     (row) =>
       String(row.Type).trim().toLowerCase() === "invoice",
@@ -117,23 +205,54 @@ function buildDashboard(data) {
     (row) =>
       String(row.Entry_Type || row.Type).trim().toLowerCase() === "advance",
   ).reduce((total, row) => total + numberValue(row.Amount), 0);
-  const qcLoss = data.QC_Log.reduce(
+  const qcLoss = qcPeriod.reduce(
     (total, row) => total + numberValue(row.QC_Loss ?? row.Loss_Value),
     0,
   );
-  const productionCost = data.Production_Log.reduce(
+  const productionCost = productionPeriod.reduce(
     (total, row) => total + numberValue(row.Total_Daily_Cost),
     0,
   );
-  const freightCost = data.Dispatch_Log.reduce(
+  const freightCost = dispatchPeriod.reduce(
     (total, row) => total + numberValue(row.Freight_Amount),
     0,
   );
 
+  const expenses = cashPeriod
+    .filter((row) => ["out", "expense", "debit", "payment"].includes(String(row.Type).trim().toLowerCase()))
+    .reduce((total, row) => total + numberValue(row.Amount), 0);
+  const pendingDispatchBlocks = pendingOrders.reduce(
+    (total, order) => total + Math.max(0, numberValue(order.Order_Blocks) - numberValue(dispatchedByOrder[order.CRM_Order_ID])),
+    0,
+  );
+  const partialOrders = pendingOrders.filter((order) =>
+    statusValue(order) === "partial" || numberValue(dispatchedByOrder[order.CRM_Order_ID]) > 0,
+  ).length;
+  const completedOrders = data.CRM_Log.filter((order) => !isOpenOrder(order)).length;
+  const customOrders = data.CRM_Log.filter((order) => String(order.Color || "").includes("+")).length;
+  const incompleteProduction = productionPeriod.filter(
+    (row) => !row.Product_Size || numberValue(row.Total_Blocks) <= 0,
+  ).length;
+  const productProduction = ["40mm", "60mm", "80mm"].map((size) => ({
+    size,
+    blocks: productionPeriod
+      .filter((row) => String(row.Product_Size).trim().toLowerCase() === size.toLowerCase())
+      .reduce((total, row) => total + numberValue(row.Total_Blocks), 0),
+  }));
+  const payrollDue = labourEarned - payrollAdvances;
+  const pendingPayments = Math.max(0, vendorInvoices - vendorPayments);
+
+  const alerts = [];
+  if (pendingDispatchBlocks > 0) alerts.push({ type: "warning", title: "Pending dispatch", detail: `${pendingDispatchBlocks} blocks remain against active orders.` });
+  if (pendingPayments > 0) alerts.push({ type: "finance", title: "Vendor payments pending", detail: `Vendor payable is ${pendingPayments}.` });
+  if (payrollDue > 0) alerts.push({ type: "payroll", title: "Payroll due", detail: `Current payroll due is ${payrollDue}.` });
+  if (incompleteProduction > 0) alerts.push({ type: "danger", title: "Incomplete production entry", detail: `${incompleteProduction} production entries need review.` });
+
   return {
     generatedAt: new Date().toISOString(),
+    period,
     cards: {
-      todaysProduction: sum(productionToday, "Total_Blocks"),
+      todaysProduction: sum(productionPeriod, "Total_Blocks"),
       currentStock:
         openingStockTotal(data.Opening_Stock) +
         sum(data.Production_Variants, "Blocks") -
@@ -147,18 +266,37 @@ function buildDashboard(data) {
             total + numberValue(row.Broken_Blocks ?? row.Broken_Quantity),
           0,
         ),
-      todaysRevenue: sum(dispatchToday, "Revenue"),
-      pendingOrders,
-      vendorOutstanding: vendorInvoices - vendorPayments,
+      todaysDispatch: dispatchPeriod.reduce((total, row) => total + numberValue(row.Dispatch_Blocks ?? row.Blocks), 0),
+      pendingOrders: pendingOrders.length,
+      pendingPayments,
+      todaysExpenses: expenses,
       cashBalance,
-      netProfit: totalRevenue - productionCost - freightCost - qcLoss,
-      qcLoss: qcToday.reduce(
-        (total, row) => total + numberValue(row.QC_Loss ?? row.Loss_Value),
-        0,
-      ),
-      payrollDue: labourEarned - payrollAdvances,
+      netProfit: periodRevenue - productionCost - freightCost - qcLoss,
+      qcLoss,
+      payrollDue,
+      lowStockAlerts: null,
     },
-    recentActivity: [...data.Activity_Log]
+    productProduction,
+    crmInsight: {
+      activeOrders: pendingOrders.length,
+      pendingOrders: pendingOrders.filter((row) => statusValue(row) !== "partial").length,
+      completedOrders,
+      customOrders,
+      urgentOrders: null,
+    },
+    dispatchInsight: {
+      dispatchedBlocks: dispatchPeriod.reduce((total, row) => total + numberValue(row.Dispatch_Blocks ?? row.Blocks), 0),
+      pendingBlocks: pendingDispatchBlocks,
+      partialOrders,
+      pendingByColor: buildPendingColors(data.CRM_Log, data.Dispatch_Log),
+    },
+    alerts,
+    availability: {
+      customerReceivables: false,
+      urgentOrders: false,
+      lowStockThresholds: false,
+    },
+    recentActivity: [...activityPeriod]
       .sort(
         (a, b) =>
           new Date(b.Timestamp || 0).getTime() -
@@ -168,11 +306,15 @@ function buildDashboard(data) {
   };
 }
 
-function buildFactoryBreakdown(data) {
-  return FACTORIES.map((factory) => ({
-    ...factory,
-    cards: buildDashboard(filterDataByFactory(data, factory.id)).cards,
-  }));
+function buildFactoryBreakdown(data, period) {
+  return FACTORIES.map((factory) => {
+    const factoryData = filterDataByExactFactory(data, factory.id);
+    return {
+      ...factory,
+      cards: buildDashboard(factoryData, period).cards,
+      hasDailyEntry: factoryData.Production_Log.some((row) => isToday(row.Date)),
+    };
+  });
 }
 
 async function readDashboardSheets() {
@@ -194,7 +336,11 @@ export default async function handler(req, res) {
     allowMethods(req, ["GET"]);
     await requireAdmin(req);
     const factoryId = req.query?.factoryId || "all";
-    const cached = dashboardCache.get(factoryId);
+    const period = ["today", "week", "month"].includes(req.query?.period)
+      ? req.query.period
+      : "today";
+    const cacheKey = `${factoryId}:${period}`;
+    const cached = dashboardCache.get(cacheKey);
 
     if (cached && Date.now() - cached.createdAt < DASHBOARD_CACHE_TTL_MS) {
       res.status(200).json({ ok: true, dashboard: cached.dashboard });
@@ -202,11 +348,18 @@ export default async function handler(req, res) {
     }
 
     const dashboardData = await readDashboardSheets();
-    const dashboard = buildDashboard(filterDataByFactory(dashboardData, factoryId));
+    const dashboard = buildDashboard(filterDataByFactory(dashboardData, factoryId), period);
     if (factoryId === "all") {
-      dashboard.factoryBreakdown = buildFactoryBreakdown(dashboardData);
+      dashboard.factoryBreakdown = buildFactoryBreakdown(dashboardData, period);
+      dashboard.factoryBreakdown
+        .filter((factory) => !factory.hasDailyEntry)
+        .forEach((factory) => dashboard.alerts.push({
+          type: "factory",
+          title: `${factory.name}: no daily production entry`,
+          detail: "No production entry has been recorded for today.",
+        }));
     }
-    dashboardCache.set(factoryId, { dashboard, createdAt: Date.now() });
+    dashboardCache.set(cacheKey, { dashboard, createdAt: Date.now() });
     res.status(200).json({
       ok: true,
       dashboard,

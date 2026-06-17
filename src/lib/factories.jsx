@@ -15,9 +15,9 @@ const FACTORY_SELECTION_KEY = "multi-factory-erp:selected-factory";
 export const ALL_FACTORY_ID = "all";
 
 export const FACTORIES = Object.freeze([
-  { id: "factory-1", name: "Factory 1", shortName: "F1", location: "Unit 1" },
-  { id: "factory-2", name: "Factory 2", shortName: "F2", location: "Unit 2" },
-  { id: "factory-3", name: "Factory 3", shortName: "F3", location: "Unit 3" },
+  { id: "factory-1", name: "Kalot Factory 1", shortName: "KF1", location: "Jaipur Unit 1" },
+  { id: "factory-2", name: "Kalot Factory 2", shortName: "KF2", location: "Jaipur Unit 2" },
+  { id: "factory-3", name: "Kalot Factory 3", shortName: "KF3", location: "Jaipur Unit 3" },
 ]);
 
 export const ROLES = Object.freeze({

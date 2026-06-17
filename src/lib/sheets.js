@@ -380,8 +380,11 @@ export async function getDashboardSnapshot({ force = false } = {}) {
   return payload.dashboard;
 }
 
-export async function getDashboardSnapshotForFactory(factoryId, { force = false } = {}) {
-  const cacheKey = `${DASHBOARD_CACHE_KEY}:${factoryId || "all"}`;
+export async function getDashboardSnapshotForFactory(
+  factoryId,
+  { force = false, period = "today" } = {},
+) {
+  const cacheKey = `${DASHBOARD_CACHE_KEY}:${factoryId || "all"}:${period}`;
   const cached = sessionGet(cacheKey, null);
   if (
     !force &&
@@ -391,8 +394,11 @@ export async function getDashboardSnapshotForFactory(factoryId, { force = false 
     return cached;
   }
 
-  const query = factoryId ? `?factoryId=${encodeURIComponent(factoryId)}` : "";
-  const payload = await apiRequest(`/api/dashboard${query}`);
+  const query = new URLSearchParams({
+    factoryId: factoryId || "all",
+    period,
+  }).toString();
+  const payload = await apiRequest(`/api/dashboard?${query}`);
   sessionSet(cacheKey, payload.dashboard);
   return payload.dashboard;
 }
@@ -452,8 +458,11 @@ export async function refreshAllCalculations({ force = true } = {}) {
   return getDashboardSnapshot({ force });
 }
 
-export async function refreshFactoryCalculations(factoryId, { force = true } = {}) {
-  return getDashboardSnapshotForFactory(factoryId, { force });
+export async function refreshFactoryCalculations(
+  factoryId,
+  { force = true, period = "today" } = {},
+) {
+  return getDashboardSnapshotForFactory(factoryId, { force, period });
 }
 
 export function clearLocalCache() {
