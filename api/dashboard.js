@@ -13,6 +13,8 @@ const DASHBOARD_SHEETS = [
   "Payroll_Log",
   "CashFlow_Log",
   "Activity_Log",
+  "Customer_Payments",
+  "Stock_Thresholds",
 ];
 
 const FACTORIES = [
@@ -103,7 +105,7 @@ function filterRowsByFactory(rows, factoryId) {
   if (!factoryId || factoryId === "all") return rows;
   return rows.filter((row) => {
     const value = row.Factory_ID || row.factoryId || row.FactoryId || "";
-    return !value || value === factoryId;
+    return value === factoryId;
   });
 }
 
@@ -134,6 +136,32 @@ function openingStockTotal(rows) {
       ? total - Math.abs(blocks)
       : total + blocks;
   }, 0);
+}
+
+function stockForThreshold(data, threshold) {
+  const matches = (row) =>
+    row.Factory_ID === threshold.Factory_ID &&
+    row.Product_Size === threshold.Product_Size &&
+    row.Color === threshold.Color;
+  const opening = data.Opening_Stock.filter(matches).reduce((total, row) => {
+    const blocks = numberValue(row.Blocks ?? row.Quantity);
+    return String(row.Adjustment_Type).trim().toLowerCase() === "remove"
+      ? total - Math.abs(blocks)
+      : total + blocks;
+  }, 0);
+  const produced = data.Production_Variants.filter(matches).reduce(
+    (total, row) => total + numberValue(row.Blocks),
+    0,
+  );
+  const dispatched = data.Dispatch_Log.filter(matches).reduce(
+    (total, row) => total + numberValue(row.Dispatch_Blocks),
+    0,
+  );
+  const rejected = data.QC_Log.filter(matches).reduce(
+    (total, row) => total + numberValue(row.Broken_Blocks),
+    0,
+  );
+  return opening + produced - dispatched - rejected;
 }
 
 function dispatchTotalsByOrder(dispatchRows) {
@@ -181,6 +209,7 @@ function buildDashboard(data, period = "today") {
   const dispatchPeriod = rowsForPeriod(data.Dispatch_Log, period);
   const qcPeriod = rowsForPeriod(data.QC_Log, period);
   const cashPeriod = rowsForPeriod(data.CashFlow_Log, period);
+  const crmPeriod = rowsForPeriod(data.CRM_Log, period);
   const activityPeriod = rowsForPeriod(data.Activity_Log, period, "Timestamp");
   const pendingOrders = data.CRM_Log.filter(isOpenOrder);
   const dispatchedByOrder = dispatchTotalsByOrder(data.Dispatch_Log);
@@ -228,8 +257,8 @@ function buildDashboard(data, period = "today") {
   const partialOrders = pendingOrders.filter((order) =>
     statusValue(order) === "partial" || numberValue(dispatchedByOrder[order.CRM_Order_ID]) > 0,
   ).length;
-  const completedOrders = data.CRM_Log.filter((order) => !isOpenOrder(order)).length;
-  const customOrders = data.CRM_Log.filter((order) => String(order.Color || "").includes("+")).length;
+  const completedOrders = crmPeriod.filter((order) => !isOpenOrder(order)).length;
+  const customOrders = crmPeriod.filter((order) => String(order.Color || "").includes("+")).length;
   const incompleteProduction = productionPeriod.filter(
     (row) => !row.Product_Size || numberValue(row.Total_Blocks) <= 0,
   ).length;
@@ -241,12 +270,33 @@ function buildDashboard(data, period = "today") {
   }));
   const payrollDue = labourEarned - payrollAdvances;
   const pendingPayments = Math.max(0, vendorInvoices - vendorPayments);
+  const customerPayments = sum(data.Customer_Payments, "Amount");
+  const customerReceivables = Math.max(0, sum(data.CRM_Log, "Order_Value") - customerPayments);
+  const urgentOrders = pendingOrders.filter((order) => {
+    const priority = String(order.Priority || "").trim().toLowerCase();
+    const dueDate = rowDateKey(order.Due_Date);
+    return ["high", "urgent"].includes(priority) || (dueDate && dueDate < indiaDateKey());
+  });
+  const lowStockItems = data.Stock_Thresholds.map((threshold) => ({
+    factoryId: threshold.Factory_ID,
+    productSize: threshold.Product_Size,
+    color: threshold.Color,
+    minimumBlocks: numberValue(threshold.Minimum_Blocks),
+    currentBlocks: stockForThreshold(data, threshold),
+  })).filter((item) => item.currentBlocks <= item.minimumBlocks);
+  const unassignedRows = Object.entries(data).reduce((total, [sheetName, rows]) => {
+    if (["Stock_Thresholds"].includes(sheetName)) return total;
+    return total + rows.filter((row) => !row.Factory_ID && !row.factoryId && !row.FactoryId).length;
+  }, 0);
 
   const alerts = [];
   if (pendingDispatchBlocks > 0) alerts.push({ type: "warning", title: "Pending dispatch", detail: `${pendingDispatchBlocks} blocks remain against active orders.` });
   if (pendingPayments > 0) alerts.push({ type: "finance", title: "Vendor payments pending", detail: `Vendor payable is ${pendingPayments}.` });
   if (payrollDue > 0) alerts.push({ type: "payroll", title: "Payroll due", detail: `Current payroll due is ${payrollDue}.` });
   if (incompleteProduction > 0) alerts.push({ type: "danger", title: "Incomplete production entry", detail: `${incompleteProduction} production entries need review.` });
+  if (urgentOrders.length > 0) alerts.push({ type: "danger", title: "Urgent orders", detail: `${urgentOrders.length} active orders are high priority or overdue.` });
+  lowStockItems.slice(0, 5).forEach((item) => alerts.push({ type: "stock", title: `Low stock: ${item.productSize} ${item.color}`, detail: `${item.currentBlocks} blocks available; minimum is ${item.minimumBlocks}.` }));
+  if (unassignedRows > 0) alerts.push({ type: "data", title: "Historical records need factory assignment", detail: `${unassignedRows} rows have no Factory_ID and remain only in consolidated totals.` });
 
   return {
     generatedAt: new Date().toISOString(),
@@ -269,12 +319,13 @@ function buildDashboard(data, period = "today") {
       todaysDispatch: dispatchPeriod.reduce((total, row) => total + numberValue(row.Dispatch_Blocks ?? row.Blocks), 0),
       pendingOrders: pendingOrders.length,
       pendingPayments,
+      customerReceivables,
       todaysExpenses: expenses,
       cashBalance,
       netProfit: periodRevenue - productionCost - freightCost - qcLoss,
       qcLoss,
       payrollDue,
-      lowStockAlerts: null,
+      lowStockAlerts: data.Stock_Thresholds.length ? lowStockItems.length : null,
     },
     productProduction,
     crmInsight: {
@@ -282,7 +333,7 @@ function buildDashboard(data, period = "today") {
       pendingOrders: pendingOrders.filter((row) => statusValue(row) !== "partial").length,
       completedOrders,
       customOrders,
-      urgentOrders: null,
+      urgentOrders: urgentOrders.length,
     },
     dispatchInsight: {
       dispatchedBlocks: dispatchPeriod.reduce((total, row) => total + numberValue(row.Dispatch_Blocks ?? row.Blocks), 0),
@@ -292,10 +343,11 @@ function buildDashboard(data, period = "today") {
     },
     alerts,
     availability: {
-      customerReceivables: false,
-      urgentOrders: false,
-      lowStockThresholds: false,
+      customerReceivables: true,
+      urgentOrders: true,
+      lowStockThresholds: data.Stock_Thresholds.length > 0,
     },
+    dataQuality: { unassignedRows },
     recentActivity: [...activityPeriod]
       .sort(
         (a, b) =>
@@ -334,8 +386,20 @@ async function readDashboardSheets() {
 export default async function handler(req, res) {
   try {
     allowMethods(req, ["GET"]);
-    await requireAdmin(req);
-    const factoryId = req.query?.factoryId || "all";
+    const user = await requireAdmin(req);
+    const requestedFactoryId = req.query?.factoryId || "all";
+    const superAdmin = String(user.role || "").trim().toLowerCase() === "super admin";
+    const assignedFactories = Array.isArray(user.factoryIds) ? user.factoryIds : [];
+    if (!superAdmin && assignedFactories.length === 0) {
+      const accessError = new Error("No factory is assigned to this user.");
+      accessError.statusCode = 403;
+      throw accessError;
+    }
+    const factoryId = superAdmin
+      ? requestedFactoryId
+      : assignedFactories.includes(requestedFactoryId)
+        ? requestedFactoryId
+        : assignedFactories[0];
     const period = ["today", "week", "month"].includes(req.query?.period)
       ? req.query.period
       : "today";

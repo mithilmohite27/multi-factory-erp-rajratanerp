@@ -30,11 +30,13 @@ const KPI_CARDS = [
   { key: "todaysDispatch", label: "Dispatch", code: "DS", format: "number", tone: "cyan" },
   { key: "pendingOrders", label: "Pending Orders", code: "PO", format: "number", tone: "amber" },
   { key: "pendingPayments", label: "Pending Payments", code: "PP", format: "currency", tone: "orange" },
+  { key: "customerReceivables", label: "Customer Receivables", code: "AR", format: "currency", tone: "blue" },
   { key: "todaysExpenses", label: "Expenses", code: "EX", format: "currency", tone: "rose" },
   { key: "payrollDue", label: "Payroll Due", code: "PY", format: "currency", tone: "violet" },
   { key: "netProfit", label: "Net Profit / Loss", code: "NP", format: "currency", tone: "emerald" },
   { key: "lowStockAlerts", label: "Low Stock Alerts", code: "LS", format: "number", tone: "slate" },
   { key: "qcLoss", label: "QC / Rejection Loss", code: "QC", format: "currency", tone: "red" },
+  { key: "cashBalance", label: "Cash Balance", code: "CB", format: "currency", tone: "slate" },
 ];
 
 const TONES = {
@@ -219,7 +221,7 @@ export default function Dashboard() {
             {selectedFactoryId === ALL_FACTORY_ID ? "Consolidated across all factories" : factoryLabel(selectedFactoryId)}
           </p>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-6">
           {KPI_CARDS.map((card) => (
             <article key={card.key} className="rounded-xl border border-slate-200 bg-white p-4 shadow-panel">
               <div className="flex items-start justify-between gap-3">
@@ -235,6 +237,9 @@ export default function Dashboard() {
               </div>
               {card.key === "lowStockAlerts" && dashboard?.cards?.lowStockAlerts == null && (
                 <p className="mt-2 text-[11px] text-slate-400">Thresholds required</p>
+              )}
+              {card.key === "pendingPayments" && (
+                <p className="mt-2 text-[11px] text-slate-400">Vendor payables</p>
               )}
             </article>
           ))}
@@ -293,7 +298,7 @@ export default function Dashboard() {
             <InsightStat label="Dispatched blocks" value={dashboard?.dispatchInsight?.dispatchedBlocks} />
             <InsightStat label="Pending blocks" value={dashboard?.dispatchInsight?.pendingBlocks} />
             <InsightStat label="Partial orders" value={dashboard?.dispatchInsight?.partialOrders} />
-            <InsightStat label="Urgent orders" unavailable />
+            <InsightStat label="Urgent / overdue" value={dashboard?.crmInsight?.urgentOrders} />
           </div>
           <div className="mt-5 border-t border-slate-100 pt-4">
             <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Pending by color</p>
@@ -316,10 +321,8 @@ export default function Dashboard() {
             <InsightStat label="Pending orders" value={dashboard?.crmInsight?.pendingOrders} />
             <InsightStat label="Completed orders" value={dashboard?.crmInsight?.completedOrders} />
             <InsightStat label="Custom color orders" value={dashboard?.crmInsight?.customOrders} />
+            <InsightStat label="Urgent / overdue" value={dashboard?.crmInsight?.urgentOrders} />
           </div>
-          <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
-            Urgent-order tracking needs Priority and Due_Date fields in CRM_Log.
-          </p>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-panel sm:p-6">

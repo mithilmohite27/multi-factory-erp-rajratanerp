@@ -7,7 +7,7 @@ import {
   PageHeader,
   SaveButton,
 } from "../components/WorkflowUI";
-import { BLOCK_COLORS } from "../lib/constants";
+import { BLOCK_COLORS, PRODUCT_SIZES } from "../lib/constants";
 import { calculateQcLoss } from "../lib/formulas";
 import {
   formatCurrency,
@@ -15,13 +15,15 @@ import {
   numberValue,
   todayInIndia,
 } from "../lib/pageUtils";
-import { appendRows, deleteRows, syncFromSheets } from "../lib/sheets";
+import { appendRows, deleteRows, ensureSheetHeaders, syncFromSheets } from "../lib/sheets";
+import { QC_LOG_HEADERS } from "../lib/sheetSchemas";
 import { useAuth } from "../lib/authContext";
 import { useSessionFormState } from "../lib/useSessionFormState";
 
 const SHEETS = ["QC_Log", "Production_Log"];
 const emptyForm = () => ({
   date: todayInIndia(),
+  productSize: PRODUCT_SIZES[0],
   color: BLOCK_COLORS[0],
   brokenBlocks: "",
   reason: "",
@@ -47,6 +49,7 @@ export default function QC() {
 
   const load = useCallback(async () => {
     try {
+      await ensureSheetHeaders("QC_Log", QC_LOG_HEADERS);
       setData(await syncFromSheets(SHEETS));
       setStatus("ready");
     } catch (error) {
@@ -127,6 +130,7 @@ export default function QC() {
               Reason: form.reason.trim(),
               Notes: form.notes.trim(),
               Created_At: timestamp,
+              Product_Size: form.productSize,
             },
           })),
           {
@@ -186,6 +190,9 @@ export default function QC() {
         <h2 className="mb-5 text-lg font-bold text-slate-900">New QC entry</h2>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Field label="Date" name="date" type="date" value={form.date} onChange={onChange} required />
+          <Field label="Product size" name="productSize" value={form.productSize} onChange={onChange}>
+            {PRODUCT_SIZES.map((value) => <option key={value}>{value}</option>)}
+          </Field>
           <Field label="Color" name="color" value={form.color} onChange={onChange}>
             {[...BLOCK_COLORS, "All Colors"].map((value) => <option key={value}>{value}</option>)}
           </Field>

@@ -8,11 +8,16 @@ import {
   getConfig,
   getCachedSheetData,
   getUsers,
+  appendRows,
+  ensureSheetHeaders,
   refreshAllCalculations,
   saveProductionSettings,
   saveUserAccess,
+  syncFromSheets,
+  updateRow,
 } from "../lib/sheets";
-import { MODULES } from "../lib/constants";
+import { STOCK_THRESHOLD_HEADERS } from "../lib/sheetSchemas";
+import { BLOCK_COLORS, MODULES, PRODUCT_SIZES } from "../lib/constants";
 import { FACTORIES, ROLES, isSuperAdmin } from "../lib/factories";
 import {
   EMPTY_PRODUCTION_SETTINGS,
@@ -37,6 +42,13 @@ const emptyUserAccessForm = () => ({
     "reports-center",
   ],
   Status: "Active",
+});
+
+const emptyThresholdForm = () => ({
+  factoryId: FACTORIES[0].id,
+  productSize: PRODUCT_SIZES[0],
+  color: BLOCK_COLORS[0],
+  minimumBlocks: "",
 });
 
 function Detail({ label, value }) {
@@ -96,6 +108,8 @@ export default function Settings() {
   );
   const [accessUsers, setAccessUsers] = useState([]);
   const [accessForm, setAccessForm] = useState(emptyUserAccessForm);
+  const [stockThresholds, setStockThresholds] = useState([]);
+  const [thresholdForm, setThresholdForm] = useState(emptyThresholdForm);
   const [, setCacheVersion] = useState(0);
   const canManageAccess = isSuperAdmin(user);
   const cachedData = getCachedSheetData();
@@ -177,6 +191,58 @@ export default function Settings() {
   useEffect(() => {
     loadUsers();
   }, [loadUsers]);
+
+  const loadStockThresholds = useCallback(async () => {
+    if (!canManageAccess) return;
+    try {
+      await ensureSheetHeaders("Stock_Thresholds", STOCK_THRESHOLD_HEADERS);
+      const data = await syncFromSheets(["Stock_Thresholds"]);
+      setStockThresholds(data.Stock_Thresholds || []);
+    } catch (error) {
+      if ([401, 403].includes(error.status)) logout();
+      else setMessage(error.message);
+    }
+  }, [canManageAccess, logout]);
+
+  useEffect(() => {
+    loadStockThresholds();
+  }, [loadStockThresholds]);
+
+  const saveStockThreshold = async (event) => {
+    event.preventDefault();
+    const minimumBlocks = Number(thresholdForm.minimumBlocks);
+    if (!Number.isFinite(minimumBlocks) || minimumBlocks < 0) {
+      setMessage("Enter a valid minimum stock quantity.");
+      return;
+    }
+    setStatus("saving-threshold");
+    const existing = stockThresholds.find(
+      (row) =>
+        row.Factory_ID === thresholdForm.factoryId &&
+        row.Product_Size === thresholdForm.productSize &&
+        row.Color === thresholdForm.color,
+    );
+    const row = {
+      Factory_ID: thresholdForm.factoryId,
+      Threshold_ID: existing?.Threshold_ID || `STOCK-${crypto.randomUUID()}`,
+      Product_Size: thresholdForm.productSize,
+      Color: thresholdForm.color,
+      Minimum_Blocks: minimumBlocks,
+      Updated_At: new Date().toISOString(),
+    };
+    try {
+      if (existing) await updateRow("Stock_Thresholds", existing._rowIndex, row);
+      else await appendRows([{ sheetName: "Stock_Thresholds", row }], ["Stock_Thresholds"]);
+      await loadStockThresholds();
+      setThresholdForm(emptyThresholdForm());
+      setMessage("Finished-stock threshold saved.");
+    } catch (error) {
+      if ([401, 403].includes(error.status)) logout();
+      else setMessage(error.message);
+    } finally {
+      setStatus("idle");
+    }
+  };
 
   const saveSettings = async (event) => {
     event.preventDefault();
@@ -593,6 +659,26 @@ export default function Settings() {
           </button>
         </article>
       </section>
+
+      {canManageAccess && (
+        <form onSubmit={saveStockThreshold} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-panel">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-600">Inventory alerts</p>
+            <h2 className="mt-2 text-lg font-black text-slate-900">Minimum finished-stock thresholds</h2>
+            <p className="mt-2 text-sm text-slate-500">Set the minimum blocks required for each factory, size, and color.</p>
+          </div>
+          <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <label><span className="mb-2 block text-xs font-bold uppercase text-slate-500">Factory</span><select value={thresholdForm.factoryId} onChange={(event) => setThresholdForm((current) => ({ ...current, factoryId: event.target.value }))} className="focus-ring w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm">{FACTORIES.map((factory) => <option key={factory.id} value={factory.id}>{factory.name}</option>)}</select></label>
+            <label><span className="mb-2 block text-xs font-bold uppercase text-slate-500">Product size</span><select value={thresholdForm.productSize} onChange={(event) => setThresholdForm((current) => ({ ...current, productSize: event.target.value }))} className="focus-ring w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm">{PRODUCT_SIZES.map((size) => <option key={size}>{size}</option>)}</select></label>
+            <label><span className="mb-2 block text-xs font-bold uppercase text-slate-500">Color</span><select value={thresholdForm.color} onChange={(event) => setThresholdForm((current) => ({ ...current, color: event.target.value }))} className="focus-ring w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm">{BLOCK_COLORS.filter((color) => color !== "Custom").map((color) => <option key={color}>{color}</option>)}</select></label>
+            <label><span className="mb-2 block text-xs font-bold uppercase text-slate-500">Minimum blocks</span><input type="number" min="0" value={thresholdForm.minimumBlocks} onChange={(event) => setThresholdForm((current) => ({ ...current, minimumBlocks: event.target.value }))} className="focus-ring w-full rounded-xl border border-slate-200 px-3.5 py-3 text-sm" required /></label>
+          </div>
+          <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-slate-500">{stockThresholds.length} thresholds configured</p>
+            <button type="submit" disabled={status === "saving-threshold"} className="focus-ring rounded-xl bg-brand-700 px-5 py-3 text-sm font-bold text-white disabled:opacity-60">{status === "saving-threshold" ? "Saving..." : "Save threshold"}</button>
+          </div>
+        </form>
+      )}
 
       <form
         onSubmit={saveSettings}

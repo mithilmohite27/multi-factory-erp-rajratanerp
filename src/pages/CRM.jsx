@@ -7,7 +7,13 @@ import {
   PageHeader,
   SaveButton,
 } from "../components/WorkflowUI";
-import { BLOCK_COLORS, CRM_STATUSES } from "../lib/constants";
+import {
+  BLOCK_COLORS,
+  CRM_STATUSES,
+  ORDER_PRIORITIES,
+  PAYMENT_SOURCES,
+  PRODUCT_SIZES,
+} from "../lib/constants";
 import {
   buildColorMixLabel,
   STANDARD_BLOCK_COLORS,
@@ -19,7 +25,8 @@ import {
   numberValue,
   todayInIndia,
 } from "../lib/pageUtils";
-import { appendRows, deleteRows, syncFromSheets } from "../lib/sheets";
+import { appendRows, deleteRows, ensureSheetHeaders, syncFromSheets } from "../lib/sheets";
+import { CRM_LOG_HEADERS, CUSTOMER_PAYMENT_HEADERS } from "../lib/sheetSchemas";
 import { useAuth } from "../lib/authContext";
 import { useSessionFormState } from "../lib/useSessionFormState";
 
@@ -28,13 +35,24 @@ const emptyForm = () => ({
   clientName: "",
   phone: "",
   location: "",
+  productSize: PRODUCT_SIZES[0],
   color: BLOCK_COLORS[0],
   customColors: [],
   customColorBrass: {},
   orderBrass: "",
   ratePerBrass: "",
   status: CRM_STATUSES[0],
+  priority: ORDER_PRIORITIES[0],
+  dueDate: "",
   notes: "",
+});
+
+const emptyPaymentForm = () => ({
+  orderId: "",
+  date: todayInIndia(),
+  amount: "",
+  paymentSource: PAYMENT_SOURCES[0],
+  reference: "",
 });
 
 function buildOrderColor(form) {
@@ -50,14 +68,21 @@ export default function CRM() {
   const [form, setForm, resetForm] = useSessionFormState("crm", emptyForm);
   const [orders, setOrders] = useState([]);
   const [dispatchRows, setDispatchRows] = useState([]);
+  const [paymentRows, setPaymentRows] = useState([]);
+  const [paymentForm, setPaymentForm] = useState(emptyPaymentForm);
   const [status, setStatus] = useState("loading");
   const [message, setMessage] = useState("");
 
   const load = useCallback(async () => {
     try {
-      const data = await syncFromSheets(["CRM_Log", "Dispatch_Log"]);
+      await Promise.all([
+        ensureSheetHeaders("CRM_Log", CRM_LOG_HEADERS),
+        ensureSheetHeaders("Customer_Payments", CUSTOMER_PAYMENT_HEADERS),
+      ]);
+      const data = await syncFromSheets(["CRM_Log", "Dispatch_Log", "Customer_Payments"]);
       setOrders(data.CRM_Log);
       setDispatchRows(data.Dispatch_Log);
+      setPaymentRows(data.Customer_Payments);
       setStatus("ready");
     } catch (error) {
       if ([401, 403].includes(error.status)) logout();
@@ -167,6 +192,9 @@ export default function CRM() {
               Status: form.status,
               Notes: form.notes.trim(),
               Created_At: timestamp,
+              Product_Size: form.productSize,
+              Priority: form.priority,
+              Due_Date: form.dueDate,
             },
           },
           {
@@ -180,12 +208,89 @@ export default function CRM() {
             },
           },
         ],
-        ["CRM_Log", "Dispatch_Log"],
+        ["CRM_Log", "Dispatch_Log", "Customer_Payments"],
       );
       setOrders(data.CRM_Log);
       setDispatchRows(data.Dispatch_Log);
+      setPaymentRows(data.Customer_Payments);
       resetForm();
       setMessage("CRM order saved.");
+      setStatus("ready");
+    } catch (error) {
+      if ([401, 403].includes(error.status)) logout();
+      else setMessage(error.message);
+      setStatus("error");
+    }
+  };
+
+  const savePayment = async (event) => {
+    event.preventDefault();
+    const order = orders.find((row) => row.CRM_Order_ID === paymentForm.orderId);
+    const amount = numberValue(paymentForm.amount);
+    const alreadyPaid = paymentRows
+      .filter((row) => row.CRM_Order_ID === paymentForm.orderId)
+      .reduce((sum, row) => sum + numberValue(row.Amount), 0);
+    if (!order || amount <= 0) {
+      setMessage("Select an order and enter the payment amount.");
+      return;
+    }
+    if (alreadyPaid + amount > numberValue(order.Order_Value) + 0.01) {
+      setMessage("Payment cannot exceed the remaining customer balance.");
+      return;
+    }
+
+    setStatus("saving");
+    const timestamp = new Date().toISOString();
+    const paymentId = `PAYMENT-${crypto.randomUUID()}`;
+    try {
+      const data = await appendRows(
+        [
+          {
+            sheetName: "Customer_Payments",
+            row: {
+              Payment_ID: paymentId,
+              CRM_Order_ID: order.CRM_Order_ID,
+              Date: paymentForm.date,
+              Client_Name: order.Client_Name,
+              Amount: amount,
+              Payment_Source: paymentForm.paymentSource,
+              Reference: paymentForm.reference.trim(),
+              Notes: "Customer payment received",
+              Created_At: timestamp,
+            },
+          },
+          {
+            sheetName: "CashFlow_Log",
+            row: {
+              CashFlow_ID: `CASH-${crypto.randomUUID()}`,
+              Date: paymentForm.date,
+              Type: "In",
+              Source: "External",
+              Amount: amount,
+              Description: `Payment from ${order.Client_Name}`,
+              Linked_Module: "Customer Payments",
+              Linked_ID: paymentId,
+              Notes: paymentForm.paymentSource,
+              Created_At: timestamp,
+            },
+          },
+          {
+            sheetName: "Activity_Log",
+            row: {
+              Timestamp: timestamp,
+              Module: "CRM",
+              Action: "Payment received",
+              Description: `${formatCurrency.format(amount)} received from ${order.Client_Name}`,
+              User_Email: user.email,
+            },
+          },
+        ],
+        ["CRM_Log", "Customer_Payments", "CashFlow_Log"],
+      );
+      setOrders(data.CRM_Log);
+      setPaymentRows(data.Customer_Payments);
+      setPaymentForm(emptyPaymentForm());
+      setMessage("Customer payment recorded.");
       setStatus("ready");
     } catch (error) {
       if ([401, 403].includes(error.status)) logout();
@@ -200,6 +305,14 @@ export default function CRM() {
     const linkedDispatches = dispatchRows.filter(
       (dispatch) => dispatch.CRM_Order_ID === row.CRM_Order_ID,
     );
+    const linkedPayments = paymentRows.filter(
+      (payment) => payment.CRM_Order_ID === row.CRM_Order_ID,
+    );
+    if (linkedPayments.length > 0) {
+      setMessage("This order has customer payments and cannot be deleted.");
+      setStatus("ready");
+      return;
+    }
     try {
       const data = await deleteRows(
         [
@@ -215,6 +328,7 @@ export default function CRM() {
           "Opening_Stock",
           "Production_Variants",
           "QC_Log",
+          "Customer_Payments",
         ],
       );
       await appendRows([
@@ -231,6 +345,7 @@ export default function CRM() {
       ]);
       setOrders(data.CRM_Log);
       setDispatchRows(data.Dispatch_Log);
+      setPaymentRows(data.Customer_Payments);
       setMessage(
         linkedDispatches.length
           ? "CRM order and linked dispatches deleted."
@@ -275,6 +390,9 @@ export default function CRM() {
           <Field label="Client name" name="clientName" value={form.clientName} onChange={onChange} required />
           <Field label="Phone" name="phone" value={form.phone} onChange={onChange} />
           <Field label="Location" name="location" value={form.location} onChange={onChange} />
+          <Field label="Product size" name="productSize" value={form.productSize} onChange={onChange}>
+            {PRODUCT_SIZES.map((value) => <option key={value}>{value}</option>)}
+          </Field>
           <Field label="Color" name="color" value={form.color} onChange={onChange}>
             {BLOCK_COLORS.map((value) => <option key={value}>{value}</option>)}
           </Field>
@@ -283,6 +401,10 @@ export default function CRM() {
           <Field label="Status" name="status" value={form.status} onChange={onChange}>
             {CRM_STATUSES.map((value) => <option key={value}>{value}</option>)}
           </Field>
+          <Field label="Priority" name="priority" value={form.priority} onChange={onChange}>
+            {ORDER_PRIORITIES.map((value) => <option key={value}>{value}</option>)}
+          </Field>
+          <Field label="Due date" name="dueDate" type="date" value={form.dueDate} onChange={onChange} />
         </div>
         {form.color === "Custom" && (
           <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
@@ -364,14 +486,41 @@ export default function CRM() {
         </div>
       </form>
 
+      <form onSubmit={savePayment} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-panel sm:p-7">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-600">Customer accounts</p>
+            <h2 className="mt-1 text-lg font-bold text-slate-900">Record customer payment</h2>
+          </div>
+          <p className="text-xs text-slate-500">Payments reduce dashboard receivables.</p>
+        </div>
+        <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <Field label="CRM order" name="orderId" value={paymentForm.orderId} onChange={({ target }) => setPaymentForm((current) => ({ ...current, orderId: target.value }))} required>
+            <option value="">Select order</option>
+            {orders.map((order) => {
+              const paid = paymentRows.filter((row) => row.CRM_Order_ID === order.CRM_Order_ID).reduce((sum, row) => sum + numberValue(row.Amount), 0);
+              const balance = Math.max(0, numberValue(order.Order_Value) - paid);
+              return balance > 0 ? <option key={order.CRM_Order_ID} value={order.CRM_Order_ID}>{order.Client_Name} | {formatCurrency.format(balance)} due</option> : null;
+            })}
+          </Field>
+          <Field label="Payment date" name="date" type="date" value={paymentForm.date} onChange={({ target }) => setPaymentForm((current) => ({ ...current, date: target.value }))} required />
+          <Field label="Amount received" name="amount" type="number" value={paymentForm.amount} onChange={({ target }) => setPaymentForm((current) => ({ ...current, amount: target.value }))} required />
+          <Field label="Payment source" name="paymentSource" value={paymentForm.paymentSource} onChange={({ target }) => setPaymentForm((current) => ({ ...current, paymentSource: target.value }))}>
+            {PAYMENT_SOURCES.map((value) => <option key={value}>{value}</option>)}
+          </Field>
+          <Field label="Reference" name="reference" value={paymentForm.reference} onChange={({ target }) => setPaymentForm((current) => ({ ...current, reference: target.value }))} />
+        </div>
+        <div className="mt-5 flex justify-end"><SaveButton busy={status === "saving"}>Save payment</SaveButton></div>
+      </form>
+
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-panel">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-100 text-sm">
             <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
               <tr>
                 <th className="px-5 py-3">Date</th><th className="px-5 py-3">Client</th>
-                <th className="px-5 py-3">Color</th><th className="px-5 py-3">Order</th>
-                <th className="px-5 py-3">Value</th><th className="px-5 py-3">Status</th>
+                <th className="px-5 py-3">Size / Color</th><th className="px-5 py-3">Order</th>
+                <th className="px-5 py-3">Value</th><th className="px-5 py-3">Priority / Due</th><th className="px-5 py-3">Status</th>
                 <th className="px-5 py-3 text-right">Action</th>
               </tr>
             </thead>
@@ -380,14 +529,15 @@ export default function CRM() {
                 <tr key={row.CRM_Order_ID || row._rowIndex}>
                   <td className="px-5 py-4">{row.Date}</td>
                   <td className="px-5 py-4 font-semibold text-slate-800">{row.Client_Name}</td>
-                  <td className="px-5 py-4">{row.Color}</td>
+                  <td className="px-5 py-4"><span className="font-semibold">{row.Product_Size || "Size not set"}</span><br /><span className="text-xs text-slate-500">{row.Color}</span></td>
                   <td className="px-5 py-4">{formatNumber.format(numberValue(row.Order_Brass))} brass</td>
                   <td className="px-5 py-4">{formatCurrency.format(numberValue(row.Order_Value))}</td>
+                  <td className="px-5 py-4"><span className="font-semibold">{row.Priority || "Normal"}</span><br /><span className="text-xs text-slate-500">{row.Due_Date || "No due date"}</span></td>
                   <td className="px-5 py-4">{row.Status}</td>
                   <td className="px-5 py-4 text-right"><DeleteButton onClick={() => remove(row)} /></td>
                 </tr>
               ))}
-              {!orders.length && <tr><td colSpan="7" className="px-5 py-10 text-center text-slate-500">No CRM orders yet.</td></tr>}
+              {!orders.length && <tr><td colSpan="8" className="px-5 py-10 text-center text-slate-500">No CRM orders yet.</td></tr>}
             </tbody>
           </table>
         </div>

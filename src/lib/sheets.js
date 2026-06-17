@@ -26,6 +26,8 @@ const FACTORY_AWARE_SHEETS = new Set([
   "External_Material_Usage",
   "Bills_Log",
   "Activity_Log",
+  "Customer_Payments",
+  "Stock_Thresholds",
 ]);
 
 let lastReadRequestAt = 0;
@@ -43,6 +45,8 @@ export const DASHBOARD_SHEETS = Object.freeze([
   "Payroll_Log",
   "CashFlow_Log",
   "Activity_Log",
+  "Customer_Payments",
+  "Stock_Thresholds",
 ]);
 
 function getCredential() {

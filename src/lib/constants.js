@@ -86,6 +86,8 @@ export const INVENTORY_SHEETS = Object.freeze([
 
 export const CRM_STATUSES = Object.freeze(["Order", "Partial", "Dispatched"]);
 
+export const ORDER_PRIORITIES = Object.freeze(["Normal", "High", "Urgent"]);
+
 export const TRANSPORT_TYPES = Object.freeze([
   "Direct Client Pickup",
   "Company Transport",

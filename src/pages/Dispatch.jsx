@@ -22,9 +22,11 @@ import {
 import {
   appendRows,
   deleteRows,
+  ensureSheetHeaders,
   syncFromSheets,
   updateRow,
 } from "../lib/sheets";
+import { CRM_LOG_HEADERS, DISPATCH_LOG_HEADERS } from "../lib/sheetSchemas";
 import { useAuth } from "../lib/authContext";
 import { useSessionFormState } from "../lib/useSessionFormState";
 
@@ -53,6 +55,10 @@ export default function Dispatch() {
 
   const load = useCallback(async () => {
     try {
+      await Promise.all([
+        ensureSheetHeaders("CRM_Log", CRM_LOG_HEADERS),
+        ensureSheetHeaders("Dispatch_Log", DISPATCH_LOG_HEADERS),
+      ]);
       setData(await syncFromSheets(SHEETS));
       setStatus("ready");
     } catch (error) {
@@ -172,6 +178,7 @@ export default function Dispatch() {
               Revenue: item.brass * numberValue(activeOrder.Rate_Per_Brass),
               Notes: form.notes.trim(),
               Created_At: timestamp,
+              Product_Size: activeOrder.Product_Size || "",
             },
           })),
           {
@@ -268,12 +275,13 @@ export default function Dispatch() {
             <option value="">Select order</option>
             {orders.filter((order) => order.remainingBlocks > 0).map((order) => (
               <option key={order.CRM_Order_ID} value={order.CRM_Order_ID}>
-                {order.Client_Name} | {order.Color} | {formatNumber.format(order.remainingBlocks)} left
+                {order.Client_Name} | {order.Product_Size || "Size not set"} | {order.Color} | {formatNumber.format(order.remainingBlocks)} left
               </option>
             ))}
           </Field>
           <Field label="Client name" name="client" value={activeOrder?.Client_Name || ""} onChange={() => {}} disabled />
           <Field label="Color" name="color" value={activeOrder?.Color || ""} onChange={() => {}} disabled />
+          <Field label="Product size" name="productSize" value={activeOrder?.Product_Size || "Not set"} onChange={() => {}} disabled />
           {!isDetailedColorMix && <Field label="Dispatch brass" name="dispatchBrass" type="number" value={form.dispatchBrass} onChange={onChange} required />}
           <Field label="Transport type" name="transportType" value={form.transportType} onChange={onChange}>
             {TRANSPORT_TYPES.map((value) => <option key={value}>{value}</option>)}
