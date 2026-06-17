@@ -296,6 +296,18 @@ function FactorySwitcher() {
     selectedFactoryId,
     setFactoryId,
   } = useFactory();
+  const canSwitchFactory = canSeeAllFactories || accessibleFactories.length > 1;
+
+  if (!canSwitchFactory) {
+    return (
+      <div className="hidden items-center gap-2 text-xs font-semibold text-slate-500 md:flex">
+        <span className="hidden xl:inline">{t("app.factoryView")}</span>
+        <span className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black text-slate-800 shadow-sm">
+          {accessibleFactories[0]?.name || factoryLabel(selectedFactoryId)}
+        </span>
+      </div>
+    );
+  }
 
   return (
     <label className="hidden items-center gap-2 text-xs font-semibold text-slate-500 md:flex">
