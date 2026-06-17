@@ -95,7 +95,9 @@ function displayNameForUser(user, t) {
 }
 
 function factoryDisplayForUser(user, accessibleFactories) {
-  if (isSuperAdmin(user)) return "1, 2, 3";
+  if (isSuperAdmin(user)) {
+    return `${accessibleFactories.length || 3} Production Units`;
+  }
   if (accessibleFactories.length === 0) return "-";
   return accessibleFactories.map((factory) => factory.name).join(", ");
 }
@@ -156,7 +158,7 @@ function Sidebar({ isOpen, closeSidebar, user }) {
             <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2">
               <p className="text-white/35">
                 {ownerView
-                  ? t("app.factories")
+                  ? "Factory Network"
                   : language === LANGUAGES.HI
                     ? "असाइन फैक्ट्री"
                     : "Assigned Factory"}
