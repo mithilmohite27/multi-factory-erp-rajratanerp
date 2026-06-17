@@ -21,6 +21,9 @@
     min-width: 320px;
     min-height: 100vh;
     margin: 0;
+    background:
+      radial-gradient(circle at top left, rgba(47, 117, 100, 0.08), transparent 28rem),
+      #f5f7f6;
   }
 
   button,
@@ -32,6 +35,18 @@
 @layer components {
   .focus-ring {
     @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2;
+  }
+
+  .erp-surface {
+    @apply border border-slate-200/80 bg-white shadow-panel;
+  }
+
+  .erp-muted-panel {
+    @apply border border-slate-200/80 bg-slate-50/80;
+  }
+
+  .erp-pill {
+    @apply inline-flex items-center rounded-full border px-3 py-1 text-xs font-bold;
   }
 }
 

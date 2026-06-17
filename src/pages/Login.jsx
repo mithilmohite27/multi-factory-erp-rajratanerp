@@ -12,8 +12,9 @@ export default function Login() {
   const isDenied = status === "denied";
 
   return (
-    <main className="relative grid min-h-screen overflow-hidden bg-[#07110f] px-5 py-10 text-white lg:grid-cols-[1.15fr_0.85fr] lg:px-12">
-      <div className="pointer-events-none absolute inset-0 opacity-50 [background-image:linear-gradient(rgba(255,255,255,0.025)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.025)_1px,transparent_1px)] [background-size:48px_48px]" />
+    <main className="relative grid min-h-screen overflow-hidden bg-[#07110f] px-5 py-8 text-white lg:grid-cols-[1.12fr_0.88fr] lg:px-12">
+      <div className="pointer-events-none absolute inset-0 opacity-55 [background-image:linear-gradient(rgba(255,255,255,0.026)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.026)_1px,transparent_1px)] [background-size:48px_48px]" />
+      <div className="pointer-events-none absolute left-0 top-0 h-80 w-80 rounded-full bg-brand-500/10 blur-3xl" />
       <section className="relative flex flex-col justify-between border-white/10 lg:border-r lg:pr-16">
         <div className="flex items-center gap-4">
           {logoUrl ? (
@@ -23,12 +24,12 @@ export default function Login() {
               className="h-16 w-16 rounded-2xl bg-white object-cover shadow-lg"
             />
           ) : (
-            <span className="grid h-16 w-16 place-items-center rounded-2xl bg-white text-lg font-black text-brand-800 shadow-lg">
+            <span className="grid h-16 w-16 place-items-center rounded-2xl bg-white text-lg font-black tracking-tight text-brand-900 shadow-lg ring-1 ring-white/70">
               {CLIENT_CONFIG.brandInitials}
             </span>
           )}
           <div>
-            <p className="font-extrabold tracking-[0.12em]">
+            <p className="font-extrabold tracking-[0.16em]">
               {CLIENT_CONFIG.appName}
             </p>
             <p className="mt-1 text-sm text-white/55">{CLIENT_CONFIG.tagline}</p>
@@ -37,25 +38,42 @@ export default function Login() {
 
         <div className="my-16 max-w-2xl lg:my-10">
           <p className="text-xs font-bold uppercase tracking-[0.28em] text-sand-300">
-            Industrial operations
+            Jaipur industrial operations
           </p>
           <h1 className="mt-5 text-4xl font-black leading-tight tracking-tight sm:text-5xl xl:text-6xl">
-            One secure view of all factories.
+            Factory control for paver block growth.
           </h1>
           <p className="mt-6 max-w-xl text-base leading-7 text-white/55 sm:text-lg">
             Production, inventory, dispatch, quality, finance, and workforce
             control for {CLIENT_CONFIG.companyName}.
           </p>
+          <div className="mt-7 grid max-w-xl gap-3 sm:grid-cols-3">
+            {[
+              ["3", "Factories"],
+              ["30+", "Workers"],
+              ["Hindi", "Friendly UI"],
+            ].map(([value, label]) => (
+              <div
+                key={label}
+                className="rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3"
+              >
+                <p className="text-xl font-black">{value}</p>
+                <p className="mt-1 text-xs text-white/40">{label}</p>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <p className="text-xs text-white/40">{CLIENT_CONFIG.poweredBy}</p>
+        <p className="text-xs text-white/40">
+          {CLIENT_CONFIG.location || CLIENT_CONFIG.address} | {CLIENT_CONFIG.poweredBy}
+        </p>
       </section>
 
       <section className="relative flex items-center justify-center py-12 lg:pl-16">
-        <div className="w-full max-w-md rounded-3xl border border-white/10 bg-white/[0.06] p-7 shadow-2xl shadow-black/30 backdrop-blur sm:p-9">
+        <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-white/[0.07] p-7 shadow-2xl shadow-black/30 backdrop-blur sm:p-9">
           <div className="mb-8">
             <span className="inline-flex rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1 text-xs font-semibold text-emerald-200">
-              Admin access
+              Secure ERP access
             </span>
             <h2 className="mt-5 text-2xl font-bold">Sign in to continue</h2>
             <p className="mt-2 text-sm leading-6 text-white/50">

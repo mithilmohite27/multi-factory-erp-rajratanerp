@@ -6,12 +6,20 @@ const REQUIRED_SHEETS_ENV = [
   "GOOGLE_PRIVATE_KEY",
 ];
 
-function hasSpreadsheetId() {
-  return Boolean(
+function findSpreadsheetId() {
+  return (
     process.env.GOOGLE_SPREADSHEET_ID ||
-      process.env.GOOGLE_SPREADSHEET_ID_MultiFactoryERP ||
-      process.env.GOOGLE_SPREADSHEET_ID_SHREEDEGARAY,
+    process.env.GOOGLE_SPREADSHEET_ID_MultiFactoryERP ||
+    process.env.GOOGLE_SPREADSHEET_ID_SHREEDEGARAY ||
+    Object.entries(process.env).find(
+      ([key, value]) => key.startsWith("GOOGLE_SPREADSHEET_ID") && value,
+    )?.[1] ||
+    ""
   );
+}
+
+function hasSpreadsheetId() {
+  return Boolean(findSpreadsheetId());
 }
 
 function requireEnvironment(requiredKeys, label) {
@@ -32,11 +40,7 @@ function requireEnvironment(requiredKeys, label) {
 
 export function getSpreadsheetId() {
   requireEnvironment(REQUIRED_SHEETS_ENV, "Google Sheets");
-  return (
-    process.env.GOOGLE_SPREADSHEET_ID ||
-    process.env.GOOGLE_SPREADSHEET_ID_MultiFactoryERP ||
-    process.env.GOOGLE_SPREADSHEET_ID_SHREEDEGARAY
-  );
+  return findSpreadsheetId();
 }
 
 export function getSheetsClient() {

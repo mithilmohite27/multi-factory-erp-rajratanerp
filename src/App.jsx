@@ -44,6 +44,30 @@ const routes = [
   { moduleKey: "settings", path: "/settings", element: <Settings /> },
 ];
 
+const MODULE_GROUPS = [
+  {
+    label: "Owner",
+    keys: ["dashboard", "reports-center", "settings"],
+  },
+  {
+    label: "Operations",
+    keys: [
+      "production-log",
+      "material-inventory",
+      "finished-block-inventory",
+      "qc",
+    ],
+  },
+  {
+    label: "Sales & Dispatch",
+    keys: ["crm", "dispatch", "bills-challans"],
+  },
+  {
+    label: "Finance",
+    keys: ["vendor-ledger", "payroll", "cash-register", "profit-loss"],
+  },
+];
+
 function BrandMark() {
   return logoUrl ? (
     <img
@@ -52,7 +76,7 @@ function BrandMark() {
       className="h-12 w-12 shrink-0 rounded-xl bg-white object-cover shadow-sm"
     />
   ) : (
-    <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-white text-sm font-black text-brand-800 shadow-sm">
+    <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-white text-sm font-black tracking-tight text-brand-900 shadow-sm ring-1 ring-white/70">
       {CLIENT_CONFIG.brandInitials}
     </span>
   );
@@ -74,14 +98,15 @@ function Sidebar({ isOpen, closeSidebar, user }) {
         />
       )}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-72 flex-col border-r border-white/[0.07] bg-[#091713] text-white shadow-2xl transition-transform duration-200 lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-72 flex-col border-r border-white/[0.08] bg-[#071410] text-white shadow-2xl transition-transform duration-200 lg:translate-x-0 ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="flex items-center gap-3 border-b border-white/[0.07] px-5 py-5">
+        <div className="border-b border-white/[0.07] px-5 py-5">
+          <div className="flex items-center gap-3">
           <BrandMark />
           <div className="min-w-0">
-            <p className="truncate text-sm font-extrabold tracking-wide">
+            <p className="truncate text-sm font-extrabold tracking-[0.14em]">
               {CLIENT_CONFIG.appName}
             </p>
             <p className="mt-0.5 text-xs text-white/45">
@@ -96,36 +121,65 @@ function Sidebar({ isOpen, closeSidebar, user }) {
           >
             &#10005;
           </button>
+          </div>
+          <div className="mt-5 grid grid-cols-2 gap-2 text-xs">
+            <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2">
+              <p className="text-white/35">Factories</p>
+              <p className="mt-1 font-black">{CLIENT_CONFIG.factoryCount}</p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2">
+              <p className="text-white/35">Mode</p>
+              <p className="mt-1 font-black">Hindi-ready</p>
+            </div>
+          </div>
         </div>
 
-        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-          {visibleModules.map((module) => (
-            <NavLink
-              key={module.key}
-              to={module.path}
-              end={module.path === "/"}
-              onClick={closeSidebar}
-              className={({ isActive }) =>
-                `focus-ring flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
-                  isActive
-                    ? "bg-white/[0.11] text-white shadow-inner"
-                    : "text-white/55 hover:bg-white/[0.06] hover:text-white"
-                }`
-              }
-            >
-              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-white/10 bg-white/[0.05] text-[10px] font-extrabold">
-                {module.shortLabel}
-              </span>
-              <span>{module.label}</span>
-            </NavLink>
-          ))}
+        <nav className="flex-1 overflow-y-auto px-3 py-4">
+          {MODULE_GROUPS.map((group) => {
+            const groupModules = visibleModules.filter((module) =>
+              group.keys.includes(module.key),
+            );
+            if (groupModules.length === 0) return null;
+
+            return (
+              <div key={group.label} className="mb-5 last:mb-0">
+                <p className="mb-2 px-3 text-[10px] font-black uppercase tracking-[0.18em] text-white/30">
+                  {group.label}
+                </p>
+                <div className="space-y-1">
+                  {groupModules.map((module) => (
+                    <NavLink
+                      key={module.key}
+                      to={module.path}
+                      end={module.path === "/"}
+                      onClick={closeSidebar}
+                      className={({ isActive }) =>
+                        `focus-ring flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+                          isActive
+                            ? "bg-white text-brand-900 shadow-lg shadow-black/10"
+                            : "text-white/58 hover:bg-white/[0.07] hover:text-white"
+                        }`
+                      }
+                    >
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-current/10 bg-current/[0.05] text-[10px] font-black">
+                        {module.shortLabel}
+                      </span>
+                      <span className="truncate">{module.label}</span>
+                    </NavLink>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </nav>
 
         <div className="border-t border-white/[0.07] px-5 py-4">
-          <p className="truncate text-xs font-semibold text-white/70">
-            {user.email}
-          </p>
-          <p className="mt-1 text-xs text-white/35">{CLIENT_CONFIG.poweredBy}</p>
+          <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
+            <p className="truncate text-xs font-bold text-white/75">
+              {user.email}
+            </p>
+            <p className="mt-1 text-xs text-white/35">{CLIENT_CONFIG.poweredBy}</p>
+          </div>
         </div>
       </aside>
     </>
@@ -152,12 +206,12 @@ function FactorySwitcher() {
   } = useFactory();
 
   return (
-    <label className="hidden items-center gap-2 text-xs font-semibold text-slate-500 sm:flex">
-      <span>View</span>
+    <label className="hidden items-center gap-2 text-xs font-semibold text-slate-500 md:flex">
+      <span className="hidden xl:inline">Factory view</span>
       <select
         value={selectedFactoryId}
         onChange={(event) => setFactoryId(event.target.value)}
-        className="focus-ring rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700"
+        className="focus-ring rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-800 shadow-sm"
       >
         {canSeeAllFactories && (
           <option value={ALL_FACTORY_ID}>All factories</option>
@@ -176,7 +230,7 @@ function AuthenticatedShell({ user, logout, isSidebarOpen, setIsSidebarOpen }) {
   const { selectedFactoryId } = useFactory();
 
   return (
-    <div className="min-h-screen bg-[#f4f7f6]">
+    <div className="min-h-screen bg-[#f5f7f6]">
       <Sidebar
         isOpen={isSidebarOpen}
         closeSidebar={() => setIsSidebarOpen(false)}
@@ -184,12 +238,12 @@ function AuthenticatedShell({ user, logout, isSidebarOpen, setIsSidebarOpen }) {
       />
 
       <div className="lg:pl-72">
-        <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl">
-          <div className="flex min-h-16 items-center gap-4 px-4 sm:px-6 lg:px-8">
+        <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/88 shadow-sm shadow-slate-200/40 backdrop-blur-xl">
+          <div className="flex min-h-[72px] items-center gap-4 px-4 sm:px-6 lg:px-8">
             <button
               type="button"
               aria-label="Open navigation"
-              className="focus-ring rounded-xl border border-slate-200 p-2 text-slate-700 lg:hidden"
+              className="focus-ring rounded-xl border border-slate-200 bg-white p-2 text-slate-700 shadow-sm lg:hidden"
               onClick={() => setIsSidebarOpen(true)}
             >
               <span className="block h-0.5 w-5 bg-current" />
@@ -198,17 +252,20 @@ function AuthenticatedShell({ user, logout, isSidebarOpen, setIsSidebarOpen }) {
             </button>
 
             <div className="min-w-0">
-              <p className="truncate text-sm font-bold text-slate-900">
+              <p className="truncate text-sm font-black text-slate-950">
                 {CLIENT_CONFIG.companyName}
               </p>
               <p className="hidden truncate text-xs text-slate-500 sm:block">
-                {factoryLabel(selectedFactoryId)} | {CLIENT_CONFIG.address}
+                {factoryLabel(selectedFactoryId)} | {CLIENT_CONFIG.address} | {CLIENT_CONFIG.industry}
               </p>
             </div>
 
             <div className="ml-auto flex items-center gap-2">
+              <span className="hidden rounded-full border border-brand-100 bg-brand-50 px-3 py-1.5 text-xs font-black text-brand-700 xl:inline-flex">
+                Hindi-friendly
+              </span>
               <FactorySwitcher />
-              <span className="hidden text-right md:block">
+              <span className="hidden rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-right md:block">
                 <span className="block text-xs font-semibold text-slate-800">
                   {user.name}
                 </span>
@@ -219,7 +276,7 @@ function AuthenticatedShell({ user, logout, isSidebarOpen, setIsSidebarOpen }) {
               <button
                 type="button"
                 onClick={logout}
-                className="focus-ring rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 transition hover:border-red-200 hover:bg-red-50 hover:text-red-700"
+                className="focus-ring rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 shadow-sm transition hover:border-red-200 hover:bg-red-50 hover:text-red-700"
               >
                 Logout
               </button>
@@ -227,7 +284,7 @@ function AuthenticatedShell({ user, logout, isSidebarOpen, setIsSidebarOpen }) {
           </div>
         </header>
 
-        <main className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <main className="mx-auto w-full max-w-[1520px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
           <Routes>
             {routes
               .filter((route) => canAccessModule(user, route.moduleKey))
@@ -242,11 +299,11 @@ function AuthenticatedShell({ user, logout, isSidebarOpen, setIsSidebarOpen }) {
           </Routes>
         </main>
 
-        <footer className="border-t border-slate-200 bg-white px-4 py-5 text-xs text-slate-500 sm:px-6 lg:px-8">
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <footer className="border-t border-slate-200 bg-white/80 px-4 py-5 text-xs text-slate-500 sm:px-6 lg:px-8">
+          <div className="mx-auto flex max-w-[1520px] flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
             <span>{CLIENT_CONFIG.companyName}</span>
             <span>
-              {CLIENT_CONFIG.phone} | {CLIENT_CONFIG.poweredBy}
+              {CLIENT_CONFIG.phone} | {CLIENT_CONFIG.email} | {CLIENT_CONFIG.poweredBy}
             </span>
           </div>
         </footer>
