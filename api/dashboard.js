@@ -109,7 +109,7 @@ function filterRowsByFactory(rows, factoryId) {
   });
 }
 
-function filterDataByFactory(data, factoryId) {
+export function filterDataByFactory(data, factoryId) {
   return Object.fromEntries(
     Object.entries(data).map(([sheetName, rows]) => [
       sheetName,
@@ -161,7 +161,16 @@ function stockForThreshold(data, threshold) {
     (total, row) => total + numberValue(row.Broken_Blocks),
     0,
   );
-  return opening + produced - dispatched - rejected;
+  const incompleteHistory = [...data.Dispatch_Log, ...data.QC_Log].some(
+    (row) =>
+      row.Factory_ID === threshold.Factory_ID &&
+      row.Color === threshold.Color &&
+      !row.Product_Size,
+  );
+  return {
+    currentBlocks: opening + produced - dispatched - rejected,
+    incompleteHistory,
+  };
 }
 
 function dispatchTotalsByOrder(dispatchRows) {
@@ -204,7 +213,7 @@ function buildPendingColors(orders, dispatchRows) {
     .sort((a, b) => b.blocks - a.blocks);
 }
 
-function buildDashboard(data, period = "today") {
+export function buildDashboard(data, period = "today") {
   const productionPeriod = rowsForPeriod(data.Production_Log, period);
   const dispatchPeriod = rowsForPeriod(data.Dispatch_Log, period);
   const qcPeriod = rowsForPeriod(data.QC_Log, period);
@@ -277,13 +286,19 @@ function buildDashboard(data, period = "today") {
     const dueDate = rowDateKey(order.Due_Date);
     return ["high", "urgent"].includes(priority) || (dueDate && dueDate < indiaDateKey());
   });
-  const lowStockItems = data.Stock_Thresholds.map((threshold) => ({
+  const thresholdResults = data.Stock_Thresholds.map((threshold) => ({
     factoryId: threshold.Factory_ID,
     productSize: threshold.Product_Size,
     color: threshold.Color,
     minimumBlocks: numberValue(threshold.Minimum_Blocks),
-    currentBlocks: stockForThreshold(data, threshold),
-  })).filter((item) => item.currentBlocks <= item.minimumBlocks);
+    ...stockForThreshold(data, threshold),
+  }));
+  const incompleteStockThresholds = thresholdResults.filter(
+    (item) => item.incompleteHistory,
+  );
+  const lowStockItems = thresholdResults.filter(
+    (item) => !item.incompleteHistory && item.currentBlocks <= item.minimumBlocks,
+  );
   const unassignedRows = Object.entries(data).reduce((total, [sheetName, rows]) => {
     if (["Stock_Thresholds"].includes(sheetName)) return total;
     return total + rows.filter((row) => !row.Factory_ID && !row.factoryId && !row.FactoryId).length;
@@ -296,6 +311,7 @@ function buildDashboard(data, period = "today") {
   if (incompleteProduction > 0) alerts.push({ type: "danger", title: "Incomplete production entry", detail: `${incompleteProduction} production entries need review.` });
   if (urgentOrders.length > 0) alerts.push({ type: "danger", title: "Urgent orders", detail: `${urgentOrders.length} active orders are high priority or overdue.` });
   lowStockItems.slice(0, 5).forEach((item) => alerts.push({ type: "stock", title: `Low stock: ${item.productSize} ${item.color}`, detail: `${item.currentBlocks} blocks available; minimum is ${item.minimumBlocks}.` }));
+  if (incompleteStockThresholds.length > 0) alerts.push({ type: "data", title: "Stock alerts need historical size mapping", detail: `${incompleteStockThresholds.length} thresholds are withheld because older Dispatch/QC rows have no Product_Size.` });
   if (unassignedRows > 0) alerts.push({ type: "data", title: "Historical records need factory assignment", detail: `${unassignedRows} rows have no Factory_ID and remain only in consolidated totals.` });
 
   return {
@@ -325,7 +341,10 @@ function buildDashboard(data, period = "today") {
       netProfit: periodRevenue - productionCost - freightCost - qcLoss,
       qcLoss,
       payrollDue,
-      lowStockAlerts: data.Stock_Thresholds.length ? lowStockItems.length : null,
+      lowStockAlerts:
+        data.Stock_Thresholds.length && incompleteStockThresholds.length === 0
+          ? lowStockItems.length
+          : null,
     },
     productProduction,
     crmInsight: {
@@ -345,9 +364,13 @@ function buildDashboard(data, period = "today") {
     availability: {
       customerReceivables: true,
       urgentOrders: true,
-      lowStockThresholds: data.Stock_Thresholds.length > 0,
+      lowStockThresholds:
+        data.Stock_Thresholds.length > 0 && incompleteStockThresholds.length === 0,
     },
-    dataQuality: { unassignedRows },
+    dataQuality: {
+      unassignedRows,
+      incompleteStockThresholds: incompleteStockThresholds.length,
+    },
     recentActivity: [...activityPeriod]
       .sort(
         (a, b) =>

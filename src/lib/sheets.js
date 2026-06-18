@@ -97,7 +97,7 @@ function filterRowsForSelectedFactory(sheetName, rows) {
 
   return rows.filter((row) => {
     const value = rowFactoryId(row);
-    return !value || value === factoryId;
+    return value === factoryId;
   });
 }
 

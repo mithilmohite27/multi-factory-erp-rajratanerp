@@ -125,7 +125,7 @@ export function filterRowsByFactory(rows, factoryId) {
   if (!factoryId || factoryId === ALL_FACTORY_ID) return rows;
   return rows.filter((row) => {
     const value = rowFactoryId(row);
-    return !value || value === factoryId;
+    return value === factoryId;
   });
 }
 

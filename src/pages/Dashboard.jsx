@@ -236,7 +236,11 @@ export default function Dashboard() {
                 </span>
               </div>
               {card.key === "lowStockAlerts" && dashboard?.cards?.lowStockAlerts == null && (
-                <p className="mt-2 text-[11px] text-slate-400">Thresholds required</p>
+                <p className="mt-2 text-[11px] text-slate-400">
+                  {dashboard?.dataQuality?.incompleteStockThresholds
+                    ? "Historical size mapping required"
+                    : "Thresholds required"}
+                </p>
               )}
               {card.key === "pendingPayments" && (
                 <p className="mt-2 text-[11px] text-slate-400">Vendor payables</p>

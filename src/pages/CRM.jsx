@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DeleteButton,
   Field,
@@ -72,6 +72,8 @@ export default function CRM() {
   const [paymentForm, setPaymentForm] = useState(emptyPaymentForm);
   const [status, setStatus] = useState("loading");
   const [message, setMessage] = useState("");
+  const paymentSubmitLock = useRef(false);
+  const paymentAttempt = useRef({ key: "", id: "" });
 
   const load = useCallback(async () => {
     try {
@@ -225,6 +227,8 @@ export default function CRM() {
 
   const savePayment = async (event) => {
     event.preventDefault();
+    if (paymentSubmitLock.current) return;
+    paymentSubmitLock.current = true;
     const order = orders.find((row) => row.CRM_Order_ID === paymentForm.orderId);
     const amount = numberValue(paymentForm.amount);
     const alreadyPaid = paymentRows
@@ -232,16 +236,23 @@ export default function CRM() {
       .reduce((sum, row) => sum + numberValue(row.Amount), 0);
     if (!order || amount <= 0) {
       setMessage("Select an order and enter the payment amount.");
+      paymentSubmitLock.current = false;
       return;
     }
     if (alreadyPaid + amount > numberValue(order.Order_Value) + 0.01) {
       setMessage("Payment cannot exceed the remaining customer balance.");
+      paymentSubmitLock.current = false;
       return;
     }
 
     setStatus("saving");
     const timestamp = new Date().toISOString();
-    const paymentId = `PAYMENT-${crypto.randomUUID()}`;
+    const attemptKey = JSON.stringify(paymentForm);
+    const paymentId =
+      paymentAttempt.current.key === attemptKey
+        ? paymentAttempt.current.id
+        : `PAYMENT-${crypto.randomUUID()}`;
+    paymentAttempt.current = { key: attemptKey, id: paymentId };
     try {
       const data = await appendRows(
         [
@@ -290,12 +301,15 @@ export default function CRM() {
       setOrders(data.CRM_Log);
       setPaymentRows(data.Customer_Payments);
       setPaymentForm(emptyPaymentForm());
+      paymentAttempt.current = { key: "", id: "" };
       setMessage("Customer payment recorded.");
       setStatus("ready");
     } catch (error) {
       if ([401, 403].includes(error.status)) logout();
       else setMessage(error.message);
       setStatus("error");
+    } finally {
+      paymentSubmitLock.current = false;
     }
   };
 

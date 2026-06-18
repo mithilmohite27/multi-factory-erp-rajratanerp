@@ -1,11 +1,12 @@
 import { requireAdmin } from "../_lib/auth.js";
 import { allowMethods, getRequestBody, sendError } from "../_lib/http.js";
 import * as sheetsService from "../_lib/sheetsService.js";
+import { scopeRowsForUser } from "../_lib/factoryAccess.js";
 
 export default async function handler(req, res) {
   try {
     allowMethods(req, ["POST"]);
-    await requireAdmin(req);
+    const user = await requireAdmin(req);
     const { sheetNames } = getRequestBody(req);
 
     if (!Array.isArray(sheetNames)) {
@@ -25,7 +26,15 @@ export default async function handler(req, res) {
               ]),
             ),
           );
-    res.status(200).json({ ok: true, data });
+    res.status(200).json({
+      ok: true,
+      data: Object.fromEntries(
+        Object.entries(data).map(([sheetName, rows]) => [
+          sheetName,
+          scopeRowsForUser(user, rows),
+        ]),
+      ),
+    });
   } catch (error) {
     sendError(res, error);
   }
